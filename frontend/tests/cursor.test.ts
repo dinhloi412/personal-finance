@@ -85,3 +85,41 @@ test("a text field keeps its caret, not a hand", () => {
   );
   assert.ok(rule.includes('input[type="checkbox"]'));
 });
+
+/**
+ * A dialog is as wide as it says it is.
+ *
+ * The overlay used to wrap its panel in a bare `<div>`. As a flex item that div
+ * is sized by its own content — 229px for the cash form — so a panel asking for
+ * `w-full max-w-lg` was measured against a 229px parent and came out 229px
+ * wide. The dialog was a third of the size it asked for, and nothing in the
+ * type system or the test suite could see it.
+ *
+ * `w-full` is what makes the wrapper take the room, and `justify-center` is
+ * what puts the panel in the middle of it: adding the first without the second
+ * left the dialog hard against the left edge, which is how this test came to
+ * check both. The rule is read from the source because that is where the
+ * decision lives.
+ */
+test("the overlay wrapper fills the backdrop and places its panel", () => {
+  const ui = readFileSync("src/components/ui.tsx", "utf8");
+  // From the declaration to the comment banner that follows it. A regex for a
+  // balanced brace block would be a lie; the next banner is a real boundary.
+  const start = ui.indexOf("function Overlay(");
+  const end = ui.indexOf("Charts", start);
+  assert.ok(start > 0 && end > start, "Overlay not found in ui.tsx");
+  const overlay = ui.slice(start, end);
+
+  assert.ok(
+    /className=\{`flex w-full min-w-0 max-w-full/.test(overlay),
+    "the overlay wrapper must be w-full, or the panel inside cannot use max-w-*",
+  );
+  assert.ok(
+    overlay.includes('side === "center" ? "justify-center" : "justify-end"'),
+    "the wrapper must place its panel: centred for a dialog, end for a slide-over",
+  );
+  assert.ok(
+    overlay.includes("onMouseDown"),
+    "the overlay still has to close on a click outside the panel",
+  );
+});

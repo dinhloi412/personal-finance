@@ -455,8 +455,8 @@ export function Holdings() {
           </Button>
         }
       >
-        <div className="mb-4 flex flex-wrap items-end gap-3">
-          <div className="w-40">
+        <div className="mb-4 flex flex-wrap items-end gap-4">
+          <div className="w-36">
             <Select
               label={t("hold.kind")}
               value={kindFilter}

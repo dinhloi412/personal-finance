@@ -583,7 +583,7 @@ function Overlay({
   side: "center" | "right";
   children: ReactNode;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
+  const wrapper = useRef<HTMLDivElement>(null);
 
   // Escape closes, which is what every overlay in every application does and
   // the absence of which is felt immediately.
@@ -604,10 +604,38 @@ function Overlay({
         side === "center" ? "items-center justify-center p-4" : "justify-end"
       }`}
       onMouseDown={(event) => {
+        // A click that lands on the backdrop itself — outside the wrapper —
+        // closes, for the strip the wrapper does not cover.
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div ref={panel}>{children}</div>
+      {/* The wrapper takes the room it is given, and the panel inside decides
+          how much of it to use.
+
+          It used to be a bare `div`, which as a flex item is sized by its own
+          content — so a panel asking for `w-full max-w-lg` was measured
+          against a 229px parent and came out 229px wide, with the `max-w-lg`
+          never reached. A dialog a third of the width it asks for looks like a
+          mistake, because it is one.
+
+          It carries the alignment too: a wrapper that fills the backdrop
+          takes the centring with it, so a `justify-center` left on the outer
+          flex would centre the wrapper — which is already the full width — and
+          leave the dialog sitting against the left edge.
+
+          And the outside-click test: clicking the dimmed area must still
+          close, and clicking the panel must not. */}
+      <div
+        ref={wrapper}
+        className={`flex w-full min-w-0 max-w-full ${
+          side === "center" ? "justify-center" : "justify-end"
+        }`}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
