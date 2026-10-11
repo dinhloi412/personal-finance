@@ -71,6 +71,14 @@ const KIND_ORDER: AssetKind[] = [
   "gold",
 ];
 
+/** Green for a gain, red for a loss, and plain for both nothing and unknown —
+ * a zero is not a small gain, and an unknown figure must not be coloured as
+ * though it were one. */
+function toneOf(value: number | null): "neutral" | "positive" | "negative" {
+  if (value === null || value === 0) return "neutral";
+  return value > 0 ? "positive" : "negative";
+}
+
 export function Dashboard() {
   const t = useT();
   const lang = useLang();
@@ -114,12 +122,11 @@ export function Dashboard() {
 
   const staleRates = portfolio.rates.filter((rate) => rate.stale);
   const gainUnknown = portfolio.gain === null;
-  const gainTone =
-    portfolio.gain === null || portfolio.gain === 0
-      ? "neutral"
-      : portfolio.gain > 0
-        ? "positive"
-        : "negative";
+  const gainTone = toneOf(portfolio.gain);
+  // The realised figure has its own way of being unknown, and it is not the
+  // same gap: a sale whose cost nobody recorded. Both the total and the
+  // percentage are then absent too, because they would be built on it.
+  const realizedUnknown = portfolio.realized_gain === null;
 
   const byKind = KIND_ORDER.map((kind) => ({
     kind,
@@ -252,12 +259,19 @@ export function Dashboard() {
   );
 
   // Nothing at all: a total of zero would be a claim about a portfolio that
-  // does not exist yet, so the page explains how to start one instead.
+  // does not exist yet, so the page explains how to start one instead. A sold
+  // position counts as something — the gain it locked in is still the user's —
+  // and so does money. The two cash balances do NOT: they exist in every
+  // database, empty, so counting the rows would mean a first-time user never
+  // saw this page at all. The same rule the demo seed uses to decide whether a
+  // database has been written in (`app/seed.py`).
+  const moneyInCash = portfolio.cash.some((row) => row.balance !== 0 || row.note);
   if (
     portfolio.counts.assets === 0 &&
-    portfolio.counts.cash === 0 &&
     portfolio.counts.deposits === 0 &&
-    portfolio.counts.gold === 0
+    portfolio.counts.gold === 0 &&
+    portfolio.realized_count === 0 &&
+    !moneyInCash
   ) {
     return (
       <div className="space-y-4">
@@ -307,15 +321,63 @@ export function Dashboard() {
                 label={t("dash.gain")}
                 value={formatSignedMoney(portfolio.gain, base, lang)}
                 tone={gainTone}
+                hint={t("dash.unrealized")}
               />
               <Stat
                 label={t("dash.gain_pct")}
                 value={formatPercent(portfolio.gain_pct, lang)}
                 tone={gainTone}
+                hint={t("dash.unrealized")}
               />
             </>
           )}
         </div>
+
+        {/* The second half of the gain, and only when there is one: a portfolio
+            that has never sold anything has nothing to add here, and a row of
+            zeros would push the figures that do matter onto a second line for
+            no reason. */}
+        {portfolio.realized_count > 0 && (
+          <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+            {realizedUnknown ? (
+              // No figure is printed at all, for the same reason the unrealised
+              // one is not: a sale with no cost recorded has a gain nobody can
+              // work out, and printing the proceeds as profit would be a lie
+              // with a number on it.
+              <div className="min-w-0">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {t("dash.realized")}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  {t("dash.realized_unknown")}
+                </p>
+              </div>
+            ) : (
+              <Stat
+                label={t("dash.realized")}
+                value={formatSignedMoney(portfolio.realized_gain, base, lang)}
+                tone={toneOf(portfolio.realized_gain)}
+                hint={t("dash.realized_count", {
+                  count: portfolio.realized_count,
+                })}
+              />
+            )}
+
+            <Stat
+              label={t("dash.total_gain")}
+              value={formatSignedMoney(portfolio.total_gain, base, lang)}
+              tone={toneOf(portfolio.total_gain)}
+              hint={
+                realizedUnknown ? t("dash.realized_unknown") : t("dash.total_hint")
+              }
+            />
+            <Stat
+              label={t("dash.total_gain_pct")}
+              value={formatPercent(portfolio.total_gain_pct, lang)}
+              tone={toneOf(portfolio.total_gain)}
+            />
+          </div>
+        )}
 
         <p className="mt-4 flex flex-wrap gap-x-4 text-xs text-slate-500">
           <span>

@@ -110,6 +110,49 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     add_missing_columns()
+    merge_cash_pots()
+
+
+def merge_cash_pots() -> list[str]:
+    """Fold duplicate cash accounts into one pot per currency.
+
+    The one migration in this app that is not "add a column". Cash used to be a
+    list of named accounts; it is now one balance per currency (`app.cash`), and
+    a database that holds two dong balances has to be brought forward or the
+    rule is a comment rather than a fact.
+
+    It is done here, with the rest of the startup work, and it is done *safely*:
+    `app.cash.merge_duplicates` writes a copy of the database file beside it
+    before it touches anything, moves the movement history onto the surviving
+    account rather than letting it cascade away, and logs what it merged. The
+    rule this file states above — a migration needs a copy of the file first —
+    is kept, and the copy is the answer to "what did it do to my records".
+    """
+    from app import cash, models
+
+    session = SessionLocal()
+    try:
+        merged = cash.merge_duplicates(session, source=database_path())
+        cash.ensure_pots(session)
+        # After the merge, not before: the merged balance is the one that has to
+        # be accounted for.
+        merged += cash.reconcile(session, source=database_path())
+        return merged
+    finally:
+        session.close()
+
+
+def database_path() -> Path | None:
+    """The SQLite file this app is using, or None for an in-memory database.
+
+    Read from the engine's URL rather than from `DEFAULT_DB_PATH`: a server
+    started with `DATABASE_URL=sqlite:///demo.db` is using that file, and a
+    backup written next to the wrong one is worse than no backup.
+    """
+    url = engine.url
+    if url.database in (None, "", ":memory:"):
+        return None
+    return Path(url.database)
 
 
 def add_missing_columns() -> list[str]:

@@ -30,6 +30,7 @@ import {
   updateGold,
 } from "../api/client";
 import type {
+  CashMoveOut,
   GoldHolding,
   GoldInput,
   GoldPricing,
@@ -37,6 +38,7 @@ import type {
   GoldUnit,
   Lang,
 } from "../api/types";
+import { CashMoveFields, CashMoveNotice } from "../components/CashMove";
 import {
   DASH,
   LUONG_IN_CHI,
@@ -117,9 +119,12 @@ function useGoldProducts() {
 function GoldForm({
   holding,
   onClose,
+  onSaved,
 }: {
   holding: GoldHolding | null;
   onClose: () => void;
+  /** The row as the server stored it, so the page can report the cash side. */
+  onSaved: (saved: GoldHolding) => void;
 }) {
   const { t, lang } = useI18n();
   const app = useApp();
@@ -138,6 +143,7 @@ function GoldForm({
       : String(holding.cost_basis),
   );
   const [note, setNote] = useState(holding?.note ?? "");
+  const [cashAmount, setCashAmount] = useState("");
   const [query, setQuery] = useState("");
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -179,13 +185,17 @@ function GoldForm({
       pricing,
       cost_basis: cost,
       note: note.trim() || null,
+      // Only for a new holding: on an edit the server moves the difference in
+      // cost itself, and a second amount here would be a number the app kept
+      // two opinions about.
+      cash_amount: holding === null ? parseAmount(cashAmount, lang) : null,
     };
 
     try {
       if (holding) {
-        await updateGold(holding.id, body);
+        onSaved(await updateGold(holding.id, body));
       } else {
-        await createGold(body);
+        onSaved(await createGold(body));
       }
       await app.refresh();
       onClose();
@@ -329,6 +339,22 @@ function GoldForm({
           onValueChange={setCostBasis}
         />
 
+        {/* Gold is bought with dong, so there is no currency to convert: the
+            amount that leaves the account is the cost itself. */}
+        {holding === null ? (
+          <CashMoveFields
+            direction="out"
+            amount={cost}
+            currency="VND"
+            cashAmount={cashAmount}
+            onCashAmount={setCashAmount}
+          />
+        ) : (
+          <p className="text-xs leading-relaxed text-slate-500">
+            {t("move.edit_note")}
+          </p>
+        )}
+
         <Textarea
           label={`${t("form.note")} (${t("state.optional")})`}
           value={note}
@@ -348,6 +374,8 @@ export function Gold() {
   const [removing, setRemoving] = useState<GoldHolding | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** What the last trade did to a cash balance, or why it did nothing. */
+  const [cashNotice, setCashNotice] = useState<CashMoveOut | null>(null);
 
   const portfolio = app.portfolio;
   if (!portfolio) return <Spinner label={t("state.loading")} />;
@@ -367,8 +395,9 @@ export function Gold() {
     if (removing === null) return;
     setBusy(true);
     try {
-      await deleteGold(removing.id);
+      const removed = await deleteGold(removing.id);
       await app.refresh();
+      setCashNotice(removed.cash);
       setRemoving(null);
       setError(null);
     } catch (cause) {
@@ -392,6 +421,8 @@ export function Gold() {
           {error}
         </Notice>
       )}
+
+      <CashMoveNotice cash={cashNotice} />
 
       {shopDown && (
         <Notice tone="warning" title={t("gold.shop_down")}>
@@ -584,6 +615,7 @@ export function Gold() {
       {formOpen && (
         <GoldForm
           holding={editing}
+          onSaved={(saved) => setCashNotice(saved.cash)}
           onClose={() => {
             setFormOpen(false);
             setEditing(null);

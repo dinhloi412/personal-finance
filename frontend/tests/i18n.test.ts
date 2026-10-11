@@ -112,6 +112,10 @@ test("no dictionary key is dead", async () => {
     // family from one expression, so the prefix is what has to appear.
     "gold.unit.",
     "gold.pricing.",
+    // `t(`move.action.${action}`)` and `t(`move.skip.${code}`)`: one sentence
+    // per way money can move, one per reason it did not.
+    "move.action.",
+    "move.skip.",
   ];
 
   const dead = viKeys.filter((key) => {

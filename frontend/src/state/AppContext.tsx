@@ -55,6 +55,8 @@ interface AppValue {
   setBaseCurrency: (currency: Currency) => Promise<void>;
   /** Change the language: stored on the server and applied immediately. */
   setLanguage: (lang: Lang) => Promise<void>;
+  /** Turn the cash link on or off. Nothing already recorded changes. */
+  setCashLinked: (on: boolean) => Promise<void>;
   /** Record today's valuation. */
   snapshot: () => Promise<void>;
 }
@@ -156,6 +158,21 @@ export function AppProvider({
     [onLanguage],
   );
 
+  const setCashLinked = useCallback(
+    async (on: boolean) => {
+      try {
+        const next = await api.updateSettings({ cash_linked: on });
+        setSettings(next);
+        // The pages read this from settings, so nothing else has to be told.
+        await load();
+      } catch (cause) {
+        setError(messageOf(cause));
+        throw cause;
+      }
+    },
+    [load],
+  );
+
   const snapshot = useCallback(async () => {
     try {
       await api.writeSnapshot();
@@ -181,6 +198,7 @@ export function AppProvider({
       refreshAll,
       setBaseCurrency,
       setLanguage,
+      setCashLinked,
       snapshot,
     }),
     [
@@ -195,6 +213,7 @@ export function AppProvider({
       refreshAll,
       setBaseCurrency,
       setLanguage,
+      setCashLinked,
       snapshot,
     ],
   );

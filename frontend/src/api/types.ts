@@ -29,6 +29,82 @@ export type GoldPricing = "buy" | "sell";
  * offering a choice that would do nothing. */
 export type InterestMode = "at_maturity";
 export type Lang = "vi" | "en";
+/** What can move money in or out of a cash balance. `cash` is the odd one: not
+ * a holding, but the user putting money in or taking it out themselves. */
+export type SubjectKind = "asset" | "gold" | "deposit" | "cash";
+/** Why a cash movement happened. Structured rather than a sentence, because
+ * the sentence has to exist in two languages. */
+export type FlowAction =
+  | "buy"
+  | "sell"
+  | "open"
+  | "close"
+  | "adjust"
+  | "refund"
+  | "in"
+  | "out";
+/** Why the cash side of a trade did nothing. */
+export type SkipCode =
+  | "link_off"
+  | "no_amount"
+  | "no_account"
+  | "no_rate"
+  | "nothing_paid";
+
+/** The cash side of a trade, as the client asks for it.
+ *
+ * There is no account to choose: cash is one pot per currency and the pot is
+ * the trade's own currency (`app.cash`).
+ *
+ * `cash_amount` is optional by design: with the cash link off it is ignored,
+ * and with it on it overrides what the app would do on its own. Omitting it
+ * means "move what this trade is worth" — which, the pot being in the trade's
+ * currency, is the trade's own number; sending it means "this is what actually
+ * left the account", the one figure only the user has. */
+export interface CashMoveRequest {
+  /** Positive, in the pot's currency: the direction comes from the trade. */
+  cash_amount?: number | null;
+}
+
+/** What the cash side actually did, or why it did nothing. */
+export interface CashMoveOut extends CashMoveRequest {
+  moved: boolean;
+  skipped?: SkipCode | null;
+  movement_id?: number | null;
+  /** The pot it moved, which is always the trade's own currency. */
+  account_id?: number | null;
+  account_name?: string | null;
+  /** Signed, in `currency`: negative is money out of the account. */
+  amount?: number | null;
+  currency?: string | null;
+  /** The account's balance after the movement. */
+  balance?: number | null;
+}
+
+/** One movement of a cash balance, and what caused it. */
+export interface CashMovement {
+  id: number;
+  account_id: number;
+  subject: SubjectKind;
+  action: FlowAction;
+  /** The holding's id at the time, null once it is gone. */
+  holding_id: number | null;
+  symbol: string | null;
+  name: string;
+  /** Signed: negative is money out of the account. */
+  amount: number;
+  currency: string;
+  /** Units of `currency` per 1 of the holding's, when the two differed. */
+  rate: number | null;
+  occurred_on: string;
+  note: string | null;
+}
+
+/** What a delete did besides removing the row. */
+export interface DeleteResult {
+  removed_id: number;
+  cash: CashMoveOut;
+}
 
 /** Why a figure is missing. Rendered as an explanation, never as a dash. */
 export type UnpricedReason =
@@ -45,6 +121,8 @@ export type UnpricedReason =
 export interface Settings {
   base_currency: Currency;
   language: Lang;
+  /** Whether trades move money in and out of a cash account. Off by default. */
+  cash_linked: boolean;
   supported_currencies: Currency[];
   supported_kinds: AssetKind[];
   supported_languages: Lang[];
@@ -71,9 +149,11 @@ export interface Asset {
   gain: number | null;
   gain_pct: number | null;
   reason: UnpricedReason | null;
+  /** What the cash side of this trade did. */
+  cash: CashMoveOut | null;
 }
 
-export interface AssetInput {
+export interface AssetInput extends CashMoveRequest {
   symbol: string;
   kind: MarketKind;
   name?: string | null;
@@ -85,6 +165,47 @@ export interface AssetInput {
 
 export type AssetPatch = Partial<AssetInput>;
 
+/** Selling part or all of a position.
+ *
+ * `proceeds` is the total received, not a price per unit — the same rule as
+ * `cost_basis`, and for the same reason. Its currency is not here: money
+ * received for a position is in the market's currency for that symbol, which
+ * the server knows and the form shows but does not ask about. */
+export interface AssetSale extends CashMoveRequest {
+  quantity: number;
+  proceeds: number;
+  /** Defaults to today, server-side. */
+  sold_on?: string;
+  note?: string | null;
+}
+
+/** One closed position: what it sold for against what it released.
+ *
+ * `cost_removed` is the *proportional* part of the position's cost basis, and
+ * null when the position never had one recorded — which is why `gain` can be
+ * null on a sale that clearly made money. */
+export interface Realized {
+  id: number;
+  symbol: string;
+  name: string;
+  kind: MarketKind;
+  quantity: number;
+  /** The currency the cost was recorded in. */
+  currency: Currency;
+  sold_on: string;
+  note: string | null;
+  proceeds: number;
+  /** The market's currency, which may be one this app cannot convert. */
+  proceeds_currency: string;
+  cost_removed: number | null;
+  proceeds_base: number | null;
+  cost_base: number | null;
+  gain: number | null;
+  gain_pct: number | null;
+  reason: UnpricedReason | null;
+  cash: CashMoveOut | null;
+}
+
 export interface CashAccount {
   id: number;
   name: string;
@@ -94,16 +215,38 @@ export interface CashAccount {
   note: string | null;
   value_base: number | null;
   reason: UnpricedReason | null;
+  /** The movement a balance edit recorded, when there was one. */
+  cash: CashMoveOut | null;
 }
 
-export interface CashInput {
-  name: string;
-  currency: Currency;
-  balance: number;
+/** Money the user says went into a balance, or came out of it.
+ *
+ * The amount is positive and the direction is spelled out: a form asking for
+ * "-500000" to mean a withdrawal is a form that will one day record one the
+ * wrong way round. The reason is free text — a salary, a bill, a gift — and
+ * never a category, because a category is the first step to a budget. */
+export interface CashEntry {
+  amount: number;
+  direction: "in" | "out";
+  /** Defaults to today, server-side. */
+  occurred_on?: string;
   note?: string | null;
 }
 
-export type CashPatch = Partial<CashInput>;
+export interface CashEntryResult {
+  account: CashAccount;
+  cash: CashMoveOut;
+}
+
+/** One entry of the cash history, as the history card reads it. */
+
+/** An edit to one pot: its label, its balance, its note. The currency is not
+ * here — it is the pot's identity, and there are exactly two. */
+export interface CashPatch {
+  name?: string;
+  balance?: number;
+  note?: string | null;
+}
 
 export interface KindTotal {
   kind: AssetKind;
@@ -163,9 +306,10 @@ export interface Deposit {
   value_base: number | null;
   interest_base: number | null;
   reason: UnpricedReason | null;
+  cash: CashMoveOut | null;
 }
 
-export interface DepositInput {
+export interface DepositInput extends CashMoveRequest {
   name: string;
   currency: Currency;
   principal: number;
@@ -186,15 +330,17 @@ export interface DepositRoll {
   note?: string | null;
 }
 
-export interface DepositWithdraw {
-  account_name?: string | null;
+export interface DepositWithdraw extends CashMoveRequest {
+  /** What the bank actually paid, when that differs from the arithmetic. */
   balance?: number | null;
 }
 
 export interface DepositWithdrawn {
   closed_deposit_id: number;
-  cash: CashAccount;
+  /** The account the money landed in, after it landed. */
+  account: CashAccount;
   amount: number;
+  cash: CashMoveOut;
 }
 
 export interface GoldProduct {
@@ -241,9 +387,10 @@ export interface GoldHolding {
   value_base: number | null;
   cost_basis: number | null;
   reason: UnpricedReason | null;
+  cash: CashMoveOut | null;
 }
 
-export interface GoldInput {
+export interface GoldInput extends CashMoveRequest {
   name: string;
   currency: Currency;
   quantity: number;
@@ -266,6 +413,17 @@ export interface Portfolio {
   cost_base: number | null;
   gain: number | null;
   gain_pct: number | null;
+  /** Closed positions, newest first, and the figures built from them. */
+  realized: Realized[];
+  /** Null when any sale is missing its cost — a total that would be too big. */
+  realized_gain: number | null;
+  realized_cost_base: number | null;
+  realized_count: number;
+  /** Unrealised + realised. Null when either side is unknown. */
+  total_gain: number | null;
+  total_gain_pct: number | null;
+  /** Every cash movement, newest first. */
+  movements: CashMovement[];
   assets: Asset[];
   cash: CashAccount[];
   deposits: Deposit[];

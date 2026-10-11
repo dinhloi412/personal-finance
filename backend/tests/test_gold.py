@@ -460,7 +460,9 @@ class TestTheGoldEndpoints:
                 "unit": "chi", "product_key": SJC_KEY,
             },
         ).json()
-        assert client.delete(f"/api/gold/{created['id']}").status_code == 204
+        removed = client.delete(f"/api/gold/{created['id']}")
+        assert removed.status_code == 200
+        assert removed.json()["cash"]["moved"] is False
         assert client.get("/api/gold").json() == []
 
     def test_a_negative_weight_is_refused(self, client):

@@ -31,7 +31,7 @@ export function Settings() {
   const { t, lang, setLang } = useI18n();
   const app = useApp();
 
-  const [busy, setBusy] = useState<"base" | "language" | "wipe" | null>(null);
+  const [busy, setBusy] = useState<"base" | "language" | "cash" | "wipe" | null>(null);
   const [copied, setCopied] = useState(false);
   const [wiping, setWiping] = useState(false);
   const [wiped, setWiped] = useState<Record<string, number> | null>(null);
@@ -73,6 +73,14 @@ export function Settings() {
     void app
       .setLanguage(code)
       .catch(() => setLang(lang))
+      .finally(() => setBusy(null));
+  };
+
+  const toggleCashLink = (on: boolean) => {
+    setBusy("cash");
+    void app
+      .setCashLinked(on)
+      .catch(() => undefined)
       .finally(() => setBusy(null));
   };
 
@@ -131,6 +139,43 @@ export function Settings() {
               </option>
             ))}
           </Select>
+        </div>
+      </Card>
+
+      {/* The switch that changes what every other page does. Off by default and
+          deliberately explicit: while the portfolio is being typed in, cash and
+          holdings are two independent facts. */}
+      <Card
+        title={t("set.cash_linked")}
+        subtitle={t("set.cash_linked_hint")}
+        actions={
+          <Badge tone={settings.cash_linked ? "positive" : "neutral"}>
+            {settings.cash_linked
+              ? t("set.cash_linked_on")
+              : t("set.cash_linked_off")}
+          </Badge>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={settings.cash_linked ? "ghost" : "primary"}
+              disabled={busy !== null || settings.cash_linked}
+              onClick={() => toggleCashLink(true)}
+            >
+              {t("set.cash_linked_on")}
+            </Button>
+            <Button
+              variant={settings.cash_linked ? "primary" : "ghost"}
+              disabled={busy !== null || !settings.cash_linked}
+              onClick={() => toggleCashLink(false)}
+            >
+              {t("set.cash_linked_off")}
+            </Button>
+          </div>
+          <p className="text-xs leading-relaxed text-slate-500">
+            {t("set.cash_linked_note")}
+          </p>
         </div>
       </Card>
 

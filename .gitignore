@@ -10,6 +10,10 @@ __pycache__/
 *.db-wal
 *.db-shm
 *.sqlite3
+# The copy a migration writes before it touches anything (see app/database.py)
+*.bak
+*.bak-wal
+*.bak-shm
 
 # Node
 node_modules/

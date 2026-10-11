@@ -28,6 +28,7 @@ export const en: Dict = {
   // -- generic actions ------------------------------------------------------
   "action.save": "Save",
   "action.cancel": "Cancel",
+  "action.sell": "Sell",
   "action.edit": "Edit",
   "action.delete": "Delete",
   "action.confirm": "Confirm",
@@ -79,6 +80,13 @@ export const en: Dict = {
   "dash.gain": "Gain / loss",
   "dash.gain_pct": "Gain / loss %",
   "dash.gain_unknown": "Not available: a position is missing its cost",
+  "dash.unrealized": "Unrealised",
+  "dash.realized": "Realised gain / loss",
+  "dash.realized_count": "{count} sales",
+  "dash.realized_unknown": "Not available: a sale is missing its cost",
+  "dash.total_gain": "Total gain / loss",
+  "dash.total_gain_pct": "Total %",
+  "dash.total_hint": "Unrealised + realised",
   "dash.allocation": "Allocation by kind",
   "dash.allocation_hint": "How much of the total each kind of asset makes up",
   "dash.exposure": "By currency",
@@ -139,6 +147,37 @@ export const en: Dict = {
     "Add your first stock, fund or crypto position. Prices are fetched from the market automatically.",
   "hold.none_filtered": "No position matches the current filter.",
 
+  // -- selling a position ---------------------------------------------------
+  "sell.title": "Sell {symbol}",
+  "sell.quantity": "Quantity to sell",
+  "sell.quantity_hint": "You hold {quantity}. Sell part of it or all of it.",
+  "sell.too_many": "You cannot sell more than you hold.",
+  "sell.all": "Sell everything",
+  "sell.proceeds": "Amount received",
+  "sell.proceeds_hint":
+    "The total received in {currency}, not a price per unit.",
+  "sell.market_hint": "The market value of that part is {amount}",
+  "sell.sold_on": "Sold on",
+  "sell.cost_note":
+    "Cost is released in proportion to what is sold, not in full.",
+  "sell.no_cost":
+    "This position has no cost recorded, so the sale's gain cannot be worked out. The sale is still recorded.",
+  "sell.confirm": "Record the sale",
+  "sell.failed": "Could not record the sale",
+  "sell.done": "Recorded the sale of {symbol}",
+
+  // -- what has been sold ---------------------------------------------------
+  "hold.realized_title": "Sold",
+  "hold.realized_hint":
+    "Gain already locked in. Kept even when the position was sold in full.",
+  "hold.sold_on": "Sold on",
+  "hold.proceeds": "Received",
+  "hold.cost_removed": "Cost released",
+  "hold.delete_sale_title": "Delete this sale",
+  "hold.delete_sale_confirm":
+    "The sale of {symbol} on {date} will be removed from the history. The position will not come back.",
+  "hold.delete_sale_action": "Delete this sale",
+
   // -- the position form ----------------------------------------------------
   "form.add_title": "Add a position",
   "form.edit_title": "Edit the position",
@@ -153,6 +192,7 @@ export const en: Dict = {
   "form.currency": "Currency of the cost",
   "form.currency_hint": "Only VND and USD are supported.",
   "form.note": "Note",
+  "form.invalid": "Not a valid value",
   "form.required": "Required",
   "form.save_failed": "Could not save",
 
@@ -165,25 +205,74 @@ export const en: Dict = {
     "The search feed is unreachable. You can still type the symbol into the field above.",
 
   // -- cash -----------------------------------------------------------------
+  "cash.pot": "Cash {currency}",
   "cash.title": "Cash",
-  "cash.add": "Add a cash account",
+  "move.from": "Take from",
+  "move.to": "Add to",
+  "move.amount": "Amount in {currency}",
+  "move.amount_hint":
+    "What actually left (or entered) the account. Edit it if the bank says otherwise.",
+  "move.edit_note": "Editing the total cost moves the difference to or from the account that paid for it.",
+  "move.done_out": "Took {amount} from {account}",
+  "move.done_in": "Added {amount} to {account}",
+  "move.balance_after": "Balance now {amount}",
+  "move.skipped": "No cash moved this time",
+  "move.skip.link_off": "The cash link is off.",
+  "move.skip.no_amount": "No cost was recorded, so there was nothing to take.",
+  "move.skip.no_account":
+    "There is no cash balance yet. Open the Cash page to make one.",
+  "move.skip.no_rate":
+    "There is no rate between these two currencies, so nothing was converted.",
+  "move.skip.nothing_paid":
+    "This was never paid for out of cash, so nothing is given back.",
+  "cash.move_log": "Cash history",
+  "cash.move_log_hint":
+    "One line per movement in or out of a balance, with the reason. The balance above is these lines plus whatever you have edited by hand.",
+  "cash.move_log_empty": "Nothing has moved yet.",
+  "cash.move_account":
+    "Balance",
+  "cash.move_all":
+    "Both",
+  "cash.move_what": "What",
+  "cash.move_date": "Date",
+  "cash.move_amount": "Amount",
+  "cash.move_history": "History",
+  "move.action.buy": "Bought {name}",
+  "move.action.sell": "Sold {name}",
+  "move.action.open": "Opened {name}",
+  "move.action.close": "Closed {name}",
+  "move.action.adjust": "Adjusted {name}",
+  "move.action.refund": "Refunded {name}",
   "cash.manual_note":
-    "Cash is a balance you write down yourself. When the money moves, edit the balance in place — it is one action.",
-  "cash.name": "Name",
+    "There is exactly one balance per currency, and it is a number you write down yourself. When the money moves, edit the balance in place — or let trades move it for you once the cash link is on.",
+  "cash.name":
+    "Label",
   "cash.balance": "Balance",
   "cash.balance_at": "Written on",
   "cash.note": "Note",
   "cash.value_in_base": "Converted",
   "cash.subtotal": "Subtotal per currency",
-  "cash.edit_title": "Edit the cash account",
-  "cash.delete_confirm": "Delete the cash account {name}?",
-  "cash.delete_title": "Delete cash account",
-  "cash.delete_action": "Delete this account",
+  "cash.edit_title":
+    "Edit the cash balance",
   "cash.edit_balance": "Edit the balance",
+  "cash.add_entry": "Add / withdraw money",
+  "cash.entry_title": "Money in or out",
+  "cash.entry_hint":
+    "Record money going into or out of this balance — a salary, a bill, someone paying you back. It is not an investment, so it needs a reason and no category.",
+  "cash.entry_direction": "Direction",
+  "cash.entry_in": "Into the balance",
+  "cash.entry_out": "Out of the balance",
+  "cash.entry_amount": "Amount",
+  "cash.entry_date": "Date",
+  "cash.entry_reason": "Reason",
+  "cash.entry_reason_hint": "For example: October salary, rent, sold the bike.",
+  "cash.entry_done_in": "Added {amount} to {name}",
+  "cash.entry_done_out": "Took {amount} out of {name}",
+  "cash.entry_failed": "Could not record it",
+  "cash.adjust_line": "Balance adjusted",
+  "move.action.in": "Money in",
+  "move.action.out": "Money out",
   "cash.balance_saved": "Balance saved",
-  "cash.none_title": "No cash accounts yet",
-  "cash.none_body":
-    "Add your first bank account or wallet, with the balance it holds today.",
   "cash.total": "Total converted",
 
   // -- savings (term deposits) ---------------------------------------------
@@ -226,7 +315,6 @@ export const en: Dict = {
   "dep.withdraw_title": "Withdraw the deposit",
   "dep.withdraw_hint":
     "The deposit is closed and the money becomes a cash balance, in one step.",
-  "dep.withdraw_account": "Record it as this cash account",
   "dep.withdraw_amount": "Amount received",
   "dep.withdraw_done": "Withdrawn {amount}",
   "dep.edit_title": "Edit the term deposit",
@@ -330,6 +418,13 @@ export const en: Dict = {
   "set.version": "Version",
   "set.database": "Data file",
   "set.database_hint": "Backing up this file backs up everything you have.",
+  "set.cash_linked": "Post trades to cash",
+  "set.cash_linked_hint":
+    "When on, every trade in Holdings, Savings and Gold takes money out of, or puts it into, the cash balance in that trade's own currency, and leaves a line of history. Leave it off while entering the portfolio you already own: then cash and holdings are two numbers you type, with nothing between them.",
+  "set.cash_linked_on": "On",
+  "set.cash_linked_off": "Off",
+  "set.cash_linked_note":
+    "Applies to trades from the moment it is switched on. Nothing already recorded is changed.",
   "set.danger": "Delete data",
   "set.danger_hint":
     "Deletes every position, cash balance and recorded point. Your settings and the cached prices and rates are kept. This cannot be undone.",

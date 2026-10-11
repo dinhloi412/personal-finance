@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app import money
+from app import movements, money
 
 # The three aliases below are the same three closed sets as `app.money`'s, and
 # they are cross-checked against it at import time: a `Literal` cannot be built
@@ -31,10 +31,35 @@ from app import money
 assert money.CURRENCIES == ("VND", "USD")
 assert money.LANGUAGES == ("vi", "en")
 assert money.MARKET_KINDS == ("stock", "fund", "crypto")
+assert money.SUBJECT_KINDS == ("asset", "gold", "deposit", "cash")
+assert money.FLOW_ACTIONS == (
+    "buy",
+    "sell",
+    "open",
+    "close",
+    "adjust",
+    "refund",
+    "in",
+    "out",
+)
+assert movements.SKIP_CODES == (
+    "link_off",
+    "no_amount",
+    "no_account",
+    "no_rate",
+    "nothing_paid",
+)
 
 Currency = Literal["VND", "USD"]
 MarketKind = Literal["stock", "fund", "crypto"]
 LanguageLiteral = Literal["vi", "en"]
+SubjectKindLiteral = Literal["asset", "gold", "deposit", "cash"]
+FlowActionLiteral = Literal[
+    "buy", "sell", "open", "close", "adjust", "refund", "in", "out"
+]
+#: Why the cash side of a trade did nothing. Shared with `app.movements`; the
+#: interface turns each code into a sentence about what to do next.
+SkipCode = Literal["link_off", "no_amount", "no_account", "no_rate", "nothing_paid"]
 
 
 # --------------------------------------------------------------------------
@@ -45,6 +70,10 @@ LanguageLiteral = Literal["vi", "en"]
 class SettingsOut(BaseModel):
     base_currency: Currency
     language: LanguageLiteral
+    #: Whether trades move money in and out of a cash account. Off by default:
+    #: while the portfolio is being typed in, cash and holdings are two
+    #: independent facts, and nothing moves until the user asks for it.
+    cash_linked: bool
     supported_currencies: list[str]
     supported_kinds: list[str]
     supported_languages: list[str]
@@ -56,6 +85,7 @@ class SettingsOut(BaseModel):
 class SettingsPatch(BaseModel):
     base_currency: Currency | None = None
     language: LanguageLiteral | None = None
+    cash_linked: bool | None = None
 
 
 class WipeOut(BaseModel):
@@ -65,11 +95,75 @@ class WipeOut(BaseModel):
 
 
 # --------------------------------------------------------------------------
+# The cash side of a trade
+# --------------------------------------------------------------------------
+
+
+class CashMoveRequest(BaseModel):
+    """The cash side of a trade, as a client asks for it.
+
+    Inherited by every payload that can move money, so the two fields are
+    spelled the same everywhere and a new endpoint cannot invent a third name
+    for them.
+
+    The account is not a field. Cash is one pot per currency and the pot is
+    picked by the trade's own currency, so there is nothing to choose and no way
+    for the money to be recorded in the wrong pile.
+
+    `cash_amount` is optional, and that is the design: with the cash link off it
+    is ignored, and with it on it is an *override* of what the app would do on
+    its own. Omitting it means "move what this trade is worth" — which, the pot
+    being in the trade's currency, is the trade's own number to the last decimal.
+    Sending it means "this is what actually left the account", the one figure
+    only the user has: a fee, or a rate the bank applied.
+    """
+
+    #: Positive, in the pot's currency: the direction comes from the trade.
+    cash_amount: float | None = Field(default=None, gt=0)
+
+
+class CashMoveOut(CashMoveRequest):
+    """What the cash side actually did, or why it did nothing.
+
+    Returned beside the holding it belongs to, because a trade that moved
+    someone's money has to say so in the same breath — and a trade that did
+    *not* move it, when the user expected it to, has to say why.
+    """
+
+    moved: bool
+    #: One of `money.SKIP_CODES` when nothing moved.
+    skipped: SkipCode | None = None
+    movement_id: int | None = None
+    account_id: int | None = None
+    account_name: str | None = None
+    #: Signed, in `currency`: negative is money out of the account.
+    amount: float | None = None
+    currency: str | None = None
+    #: The account's balance after the movement, so a client can show the
+    #: result without asking again.
+    balance: float | None = None
+
+
+class DeleteOut(BaseModel):
+    """What a delete did besides removing the row.
+
+    Deleting a holding is now two acts when the cash link is on: the row goes,
+    and the money the account still had in it comes back. A bare `204 No
+    Content` would leave the client unable to tell whether the second one
+    happened, which for a balance the user is looking at is not an acceptable
+    thing to be unsure about.
+    """
+
+    removed_id: int
+    cash: CashMoveOut
+
+
+# --------------------------------------------------------------------------
 # Assets (market positions)
 # --------------------------------------------------------------------------
 
 
-class AssetCreate(BaseModel):
+class AssetCreate(CashMoveRequest):
     symbol: str = Field(min_length=1, max_length=32)
     kind: MarketKind
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -87,7 +181,7 @@ class AssetCreate(BaseModel):
         return cleaned
 
 
-class AssetUpdate(BaseModel):
+class AssetUpdate(CashMoveRequest):
     symbol: str | None = Field(default=None, min_length=1, max_length=32)
     kind: MarketKind | None = None
     # `min_length=1` on a nullable field means "may be omitted, may not be
@@ -140,19 +234,71 @@ class AssetOut(BaseModel):
     gain_pct: float | None = None
     reason: str | None = None
 
+    #: What the cash side of this trade did. None when the endpoint never
+    #: touches cash (a price refresh, a read).
+    cash: CashMoveOut | None = None
 
-class CashCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
+
+class AssetSellRequest(CashMoveRequest):
+    """Sell some or all of a position, at a price the user states.
+
+    Only two things are asked for, because only two things are facts the app
+    cannot look up: how much was sold and how much money came back. The gain is
+    derived from those plus the position's own cost basis — never from the
+    current market price, which is what the position would be worth if it had
+    not been sold.
+
+    The currency of `proceeds` is not a field: money received for a position is
+    in the market's currency for that symbol (the quote's), and falls back to
+    the position's own only when nothing was ever quoted. Asking the user to
+    choose would invite a USD figure to be recorded as dong.
+    """
+
+    quantity: float = Field(gt=0)
+    #: Total received, not a price per unit — the same rule as `cost_basis`,
+    #: and for the same reason: a per-unit price cannot be added up across
+    #: several sales without knowing each one's size.
+    proceeds: float = Field(ge=0)
+    #: Defaults to today, server-side.
+    sold_on: date | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class RealizedOut(BaseModel):
+    """One closed position, with what it sold for against what it released.
+
+    Every base-currency figure is None-able, and for two different reasons that
+    the `reason` field tells apart: money that could not be converted, and a
+    cost nobody recorded.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    symbol: str
+    name: str
+    kind: MarketKind
+    quantity: float
+    #: The currency the cost was recorded in.
     currency: Currency
-    balance: float
-    note: str | None = Field(default=None, max_length=1000)
+    sold_on: str
+    note: str | None
 
+    proceeds: float
+    #: The market's currency; not `Currency`, because a quote may arrive in a
+    #: currency this app records but deliberately cannot convert.
+    proceeds_currency: str
+    cost_removed: float | None
 
-class CashUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    currency: Currency | None = None
-    balance: float | None = None
-    note: str | None = Field(default=None, max_length=1000)
+    proceeds_base: float | None = None
+    cost_base: float | None = None
+    gain: float | None = None
+    gain_pct: float | None = None
+    reason: str | None = None
+
+    #: What the cash side of this trade did. None when the endpoint never
+    #: touches cash (a price refresh, a read).
+    cash: CashMoveOut | None = None
 
 
 class CashOut(BaseModel):
@@ -167,6 +313,50 @@ class CashOut(BaseModel):
 
     value_base: float | None = None
     reason: str | None = None
+
+    #: The movement a balance edit recorded, when there was one. Reading a
+    #: balance never has one; changing it always does, because a balance that
+    #: moved with no line under it is what the history exists to prevent.
+    cash: CashMoveOut | None = None
+
+
+class CashEntryRequest(BaseModel):
+    """Money the user says went into or came out of a balance.
+
+    Not a trade, and not categorised: a salary, a bill, a gift, a transfer from
+    a bank the app does not track. The reason is free text, because the moment a
+    reason becomes a category this app has become the budgeting tool it
+    deliberately is not (docs/SPEC.md §1.2).
+    """
+
+    #: Positive, in the pot's own currency. Which way it went is `direction`,
+    #: not a sign: a form asking for "-500000" to mean a withdrawal is a form
+    #: that will one day record one the wrong way round.
+    amount: float = Field(gt=0)
+    direction: Literal["in", "out"]
+    #: Defaults to today, server-side.
+    occurred_on: date | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class CashEntryOut(BaseModel):
+    """The balance after an entry, and the line that explains it."""
+
+    account: "CashOut"
+    cash: CashMoveOut
+
+
+class CashUpdate(BaseModel):
+    """An edit to one pot: its label, its balance, its note.
+
+    The currency is absent on purpose. It is the pot's identity — one pot per
+    currency, enforced by the database and by `app.cash` — so "change this pot's
+    currency" is not an edit, it is a different pot.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    balance: float | None = Field(default=None, ge=0)
+    note: str | None = Field(default=None, max_length=1000)
 
 
 # --------------------------------------------------------------------------
@@ -210,6 +400,31 @@ class Unconverted(BaseModel):
     reason: str | None = None
 
 
+class CashMovementOut(BaseModel):
+    """One movement of a cash balance, and what caused it.
+
+    A signed amount in the account's currency, with the holding it belongs to
+    snapshotted rather than pointed at: after a position is deleted, the row is
+    the only thing that can still say where the money went.
+    """
+
+    id: int
+    account_id: int
+    subject: SubjectKindLiteral
+    action: FlowActionLiteral
+    #: The holding's id at the time, null once it is gone.
+    holding_id: int | None
+    symbol: str | None
+    name: str
+    #: Signed: negative is money out of the account.
+    amount: float
+    currency: str
+    #: Units of `currency` per 1 of the holding's, when the two differed.
+    rate: float | None
+    occurred_on: str
+    note: str | None
+
+
 class PortfolioCounts(BaseModel):
     assets: int
     cash: int
@@ -230,6 +445,19 @@ class PortfolioOut(BaseModel):
     cost_base: float | None
     gain: float | None
     gain_pct: float | None
+    #: Closed positions, newest first, and the figures the dashboard shows
+    #: beside the unrealised ones. `realized_gain` is None when any sale is
+    #: missing a cost; `total_gain` is None when either side is unknown.
+    realized: list[RealizedOut]
+    realized_gain: float | None
+    realized_cost_base: float | None
+    realized_count: int
+    total_gain: float | None
+    total_gain_pct: float | None
+    #: Every cash movement, newest first. One list rather than a page per
+    #: account: the Cash page shows each account's own history by filtering it,
+    #: and the Dashboard can count what moved without a second request.
+    movements: list[CashMovementOut]
     assets: list[AssetOut]
     cash: list[CashOut]
     deposits: list[DepositOut]
@@ -358,7 +586,7 @@ class HealthOut(BaseModel):
 # --------------------------------------------------------------------------
 
 
-class DepositCreate(BaseModel):
+class DepositCreate(CashMoveRequest):
     name: str = Field(min_length=1, max_length=120)
     currency: Currency
     principal: float = Field(gt=0)
@@ -377,7 +605,7 @@ class DepositCreate(BaseModel):
         return self
 
 
-class DepositUpdate(BaseModel):
+class DepositUpdate(CashMoveRequest):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     currency: Currency | None = None
     principal: float | None = Field(default=None, gt=0)
@@ -418,6 +646,10 @@ class DepositOut(BaseModel):
     interest_base: float | None = None
     reason: str | None = None
 
+    #: What the cash side of this trade did. None when the endpoint never
+    #: touches cash (a price refresh, a read).
+    cash: CashMoveOut | None = None
+
 
 class GoldOut(BaseModel):
     """A gold holding as valued today.
@@ -455,8 +687,12 @@ class GoldOut(BaseModel):
     cost_basis: float | None
     reason: str | None = None
 
+    #: What the cash side of this trade did. None when the endpoint never
+    #: touches cash (a price refresh, a read).
+    cash: CashMoveOut | None = None
 
-class GoldCreate(BaseModel):
+
+class GoldCreate(CashMoveRequest):
     name: str = Field(min_length=1, max_length=120)
     currency: Currency
     quantity: float = Field(gt=0)
@@ -472,7 +708,7 @@ class GoldCreate(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
-class GoldUpdate(BaseModel):
+class GoldUpdate(CashMoveRequest):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     currency: Currency | None = None
     quantity: float | None = Field(default=None, gt=0)
@@ -526,19 +762,33 @@ class DepositRollRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
-class DepositWithdrawRequest(BaseModel):
-    """Matured money comes out: the deposit is closed and a cash row records it.
+class DepositWithdrawRequest(CashMoveRequest):
+    """Matured money comes out: the deposit is closed and the money lands in cash.
 
     Both halves happen in one request on purpose. Doing it in two screens is
     how a portfolio ends up holding the same million twice — once as a deposit
     that was never closed and once as cash that arrived.
+
+    Where it lands is not a choice: the pot of the deposit's own currency, which
+    is the only cash there is (see `app.cash`). A term deposit is not a new pile
+    of money — it is the same money coming back.
+
+    `balance` is what the bank actually paid, when that differs from what the
+    arithmetic says. Nothing else is asked: the destination is the pot.
     """
 
-    account_name: str | None = Field(default=None, max_length=120)
     balance: float | None = Field(default=None, ge=0)
 
 
 class DepositWithdrawOut(BaseModel):
+    """A closed deposit, the account the money landed in, and what moved.
+
+    `account` rather than `cash`, because `cash` on every other response means
+    "what the cash side did" (`CashMoveOut`) and two different shapes under one
+    name is how a client reads the wrong one.
+    """
+
     closed_deposit_id: int
-    cash: "CashOut"
+    account: "CashOut"
     amount: float
+    cash: CashMoveOut

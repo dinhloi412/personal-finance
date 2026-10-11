@@ -364,6 +364,181 @@ Six things were found by working with the real payload rather than a sample:
 price sources for one holding is two ways to be wrong, and the user was explicit
 about which one they track.
 
+## M14 — Selling a position, and keeping the gain (added after the app worked)
+
+Asked for in one sentence — "if I sell that symbol, does the gain still count?" —
+and the answer at the time was no: `DELETE /api/assets/{id}` removed the
+position *and* the cost basis with it, so the portfolio's reported loss got
+smaller every time a loser was sold. That is the one way this app could be used
+to tell yourself a story, and it is why this milestone exists.
+
+**The design question was where a sale lives, not how to subtract.**
+
+- `app/models.py` — a `realized` table holding the *facts of the trade* in the
+  currencies they happened in: `cost_removed` in the position's, `proceeds` in
+  the market's. No FK to `instruments`: the row has to outlive the position, so
+  it carries its own symbol, name and kind.
+- `app/realized.py` — the proportional-cost arithmetic alone, with no session
+  arithmetic and no conversion in it, so it can be tested as arithmetic. This is
+  the `deposits.py` pattern applied to a second computation.
+- `app/valuation.py` — `value_sale` derives every base-currency figure on read,
+  exactly as `value_asset` does for a live position. A sale is a fact that
+  gets converted, not a total frozen on a day; putting it in `Valuation`'s shape
+  would have left a dong gain sitting in a dollar portfolio after a base switch.
+- `POST /api/assets/{id}/sell`, `GET|DELETE /api/realized` — the sale itself, a
+  way to read it, and a way back from one entered by mistake.
+- `frontend/src/views/Holdings.tsx` — a **Sell** entry in the row menu and, under
+  the table, the closed positions with what each released.
+
+**Three decisions a reader could have made differently:**
+
+1. **Average cost, not lots.** A position stores one total (`cost_basis`), so
+   the cost a sale releases is `cost_basis × sold / held`. Recording the
+   purchases would be a ledger, and §1.2 says there is not one.
+2. **A fully sold position is deleted, not zeroed.** A zero-quantity row has no
+   value, so it would appear in the dashboard's `unconverted` list telling the
+   user that a position they have already sold is "not counted" — a warning
+   about nothing. `remaining <= 1e-9` is a full sale, and the tolerance is there
+   because `100 - 1e-14` is what a pre-filled form can send.
+3. **Nothing is posted to cash.** Inventing a cash row from a sale would put
+   money somewhere the user never said it went. They count their balances.
+
+**The test that matters** is not that the arithmetic adds up — it is the
+invariant: *selling at the price the market is quoting must leave the total gain
+unchanged*, because the same money has only moved from unrealised to realised.
+`TestTheDashboardTotals` asserts it, and `scripts/acceptance.sh` checks it
+against a live server, because a sign error in the proportional cost would pass
+every other test in the suite while quietly doubling a loss.
+
+**One bug found on the way, in code that was already there.** `POST
+/api/settings/wipe` — "Xoá toàn bộ dữ liệu" — deleted positions, cash and
+history and left **term deposits and gold** behind, in the one feature whose
+whole purpose is that nothing is left behind. Fixed in the same change, with a
+test that asserts every table of records is listed, because a wipe is only as
+complete as the list someone remembered to keep up to date.
+
+## M15 — Cash-linked trades (added after the app worked)
+
+Asked for as the next step after selling: *after the initial data is in, later
+trades should take from cash and put back to cash, with a switch to turn that
+off.* The switch is the whole design. While a portfolio is being typed in, the
+holdings and the balance are two independent facts, and an app that moved money
+during that pass would be correcting the user's arithmetic with its own.
+
+**The decision that shaped the module was where the arithmetic lives.** Money
+moving between two tables in six endpoints is six chances for a balance to
+disagree with its own history, so there is one writer — `app/movements.py` —
+and every endpoint is a sign and a reason on top of it. The balance is updated
+by the same value the row records, in the same call.
+
+**Four things a reader could have decided differently:**
+
+1. **The user may override the amount.** A purchase of 1 500 USD paid from a
+   dong account is a number of đồng that only the bank statement knows. The form
+   pre-fills today's rate and lets it be corrected; the rate used is stored with
+   the row.
+2. **The browser never converts.** Pre-filling that figure needed a conversion
+   on the client, which would have been a second place where the arithmetic
+   lives — so `GET /api/fx/convert` exists instead. Writing it exposed a real
+   bug on the first live run: `Converter.report()` lists only the rates it has
+   *touched*, and asking before converting returned a figure with no date and no
+   source. The fix is one line, and a test now asserts the provenance.
+3. **A delete refunds `net_invested`, not the cost basis.** Bought for 10 000 000
+   and half sold for 7 000 000, a position has 3 000 000 of the account's money
+   in it — refunding the 5 000 000 of remaining cost would print money on the
+   way out.
+4. **The link never blocks the record.** No account, no rate, no cost: the trade
+   is written and the response says which of the three stopped the cash side.
+   The alternative loses the more important half of the transaction.
+
+**A name the scope guard rejected.** The module was written as `cashflow.py`,
+and `test_scope.py` failed it immediately: "cash-flow analysis" is a feature
+this app was reduced *from*, and a module named after it is how a removed
+feature comes back. It is `movements.py` now. The guard did its job, and
+weakening the list instead would have removed the only thing standing between
+this app and the project it was cut down from.
+
+**One contract change worth naming.** `DELETE /api/assets/{id}` and its two
+siblings answer `200` with the movement instead of `204`, because deleting is
+now two acts and a client that could not tell whether the second one happened
+would have to guess about a balance it is looking at.
+
+## M16 — One cash balance per currency (asked for after M15)
+
+The next request, almost immediately: *cash should be one source, accumulated
+into, not split into accounts.* M15 had just given every trade a picker and a
+`cash_account_id`, and the picker was the complaint — a choice nobody wanted,
+protecting against a mistake nobody was going to make.
+
+**Two balances, not one, and that is the whole design.** One pot would have to be
+denominated in something, and a dollar purchase paid from a dong pot is a
+conversion the user did at a counter. Two keep every trade in its own currency,
+which is also what removed the conversion from the common path: a trade in
+dollars moves the dollar pot, in the trade's own number, to the last decimal.
+
+**What went with the picker.** `POST /api/cash` and `DELETE /api/cash/{id}`
+were deleted rather than guarded — a route that cannot exist is a stronger
+refusal than a validator rejecting its currency. `GET /api/fx/convert` was built
+in M15 for a form to pre-fill a cross-currency amount, and with no
+cross-currency amount to pre-fill it was deleted too; the lesson it taught (a
+figure must carry its provenance) stayed, and the rate a movement records still
+travels with its row.
+
+**Three things the change had to get right, and each has a test:**
+
+1. **The pots are always there.** Created at startup and again on any read, so
+   "one balance per currency" is a property of the API rather than of someone
+   having visited the Cash page. A wipe empties them instead of removing them.
+2. **A currency with no pot falls back to đồng and reports it.** An EUR-quoted
+   holding's sale is recorded and the cash side says `no_rate`, rather than
+   reaching for a rate that does not exist.
+3. **A deposit's payout is the one movement the switch does not govern.** With
+   the link off there is still nowhere else for the money to go, and a balance
+   that grew with no line of history is what the history exists to prevent.
+
+**The migration is the interesting part.** Cash used to be a list, so an older
+database can hold two dong balances — the user's own did, by the time this was
+written. `merge_cash_pots` runs at startup, adds the balances together, moves the
+movement history onto the surviving row instead of letting it cascade away with
+the account, and **writes a copy of the database file beside it first**. That
+last part is this repository's own rule (`app/database.py`: a migration needs a
+copy of the file first), and `tests/test_schema_upgrade.py` builds a
+constraint-free `cash_accounts` table by hand to prove the whole path, because
+the rest of the suite builds its schema from the models and could never have
+caught it.
+
+## M17 — Money in and out of cash (asked for right after M16)
+
+*"Isn't there a way to add money to cash?"* — and there was not. M16 had left the
+Cash page with one way to change a balance: click it and type the new number.
+That is the app's oldest idea (a balance you count), and it is not the same thing
+as "5 000 000 arrived from my salary", which is an event with a reason and a day
+of its own.
+
+**The request exposed a gap the page was already claiming to fill.** The history
+card said a balance is explained by the lines under it — while a typed-in balance
+left no line at all. So this milestone is two things at once: an action that puts
+money in and takes it out, and making every change to a balance leave a line.
+
+**Three decisions:**
+
+1. **A reason, not a category.** Free text, stored as text. The moment a reason
+   becomes a category this app is a budgeting tool, which §1.2 refuses and
+   `test_scope.py` enforces.
+2. **A direction, not a sign.** `{"amount": 500000, "direction": "out"}` rather
+   than `-500000`: a form that asks for a minus to mean a withdrawal is a form
+   that will one day record one the wrong way round.
+3. **The books balance, including backwards.** `reconcile` runs at startup and
+   writes one opening line for money that was in a pot before there were lines,
+   dated the day the balance was last counted. It is idempotent, and it writes a
+   copy of the file first — the same rule as the merge next to it.
+
+**What the live database showed.** By the end of this milestone the user's own
+`data.db` had two dong accounts merged by their own run of the app, five
+movements, and a balance of 20 100 000 ₫ against a history summing to zero —
+money that predates the history, exactly the case `reconcile` exists for. On the
+next start it gets one line, and from then on the page's claim is true.
+
 ## Risk register
 
 | Risk | Mitigation |
@@ -374,7 +549,7 @@ about which one they track.
 | Base-currency change rewriting history | `Valuation` stores the base it was written in |
 | Base-currency change emptying the total | Both bases are seeded and both are refreshed |
 | i18n drift (missing key) | One `Dict` interface for both trees + a parity test |
-| Scope creep back toward the reference app | `test_scope.py` fails on a forbidden module name, on an AI-provider string, and on any API path outside the 19 the spec lists |
+| Scope creep back toward the reference app | `test_scope.py` fails on a forbidden module name, on an AI-provider string, and on any API path outside the set the spec lists |
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
@@ -388,6 +563,18 @@ about which one they track.
 | An existing database missing a new column | `add_missing_columns()` at startup, tested against a deliberately old-shape database |
 | Compounding a deposit the way the bank does not | Simple interest on actual days over 365, asserted against hand-checkable figures |
 | Counting withdrawn money twice | Withdrawal closes the deposit and writes the cash in one request, and a test asserts the total is unchanged |
+| Selling a position making its loss disappear | The sale is written to `realized` and folded into `total_gain`; a test asserts that selling at the market price leaves the total gain unchanged |
+| A sale with no recorded cost inflating the realised gain | `realized_gain` and `total_gain` are null, not too large — the same rule the unrealised figure already followed |
+| A sale recorded at the market's price by accident | The sell form never pre-fills the amount received; it shows the market value beside the field as a reference only |
+| Money moved during the initial entry, when nothing should move | The link is off by default, is a switch the user turns on deliberately, and nothing is applied retroactively |
+| A balance that disagrees with its own history | One writer (`app/movements.py`) updates the balance and records the row from the same value, in the same call |
+| Money recorded in the wrong cash account | There is only one per currency, and the trade's own currency picks it — nothing to choose, so nothing to choose wrongly |
+| A migration quietly rewriting a user's balances | The merge adds the balances up, carries the history across, logs what it merged, and writes a copy of the file beside it first |
+| A balance that changed with no line under it | Every path writes one: trades, money in and out, a counted balance, and an opening line for money that predates the history |
+| Money in and out becoming income/expense tracking | One signed amount and free text — no category, no month, no total by type, and `test_scope.py` refuses a module named after any of them |
+| A delete that prints money | The refund is `net_invested` — what the account actually paid — and a holding never paid for out of cash gives nothing back |
+| A browser converting currency on its own | `GET /api/fx/convert`; the client asks, the server converts, and the rate's day and source travel with the answer |
+| A trade lost because the cash side could not be filled in | The link never blocks the record: no account, no rate or no cost writes the trade and reports why nothing moved |
 | Float rounding on VND (large integers) | Round for display only; VND shown with 0 decimals |
 
 ## Order of work

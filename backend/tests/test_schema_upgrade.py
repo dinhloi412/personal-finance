@@ -138,3 +138,132 @@ class TestInitDbIsSafeToRunAgain:
 
         after = {table: columns(table) for table in ("valuations", "deposits", "assets")}
         assert after == before
+
+
+@pytest.fixture
+def old_cash_shape():
+    """A database from before cash was one pot per currency.
+
+    Built by hand rather than by dropping something: SQLite cannot remove a
+    UNIQUE constraint, so the only way to have a `cash_accounts` table without
+    one — which is what an older build wrote — is to create the table the way
+    that build created it. `create_all` then leaves it exactly as it is, which
+    is the behaviour the real upgrade relies on.
+    """
+    Base.metadata.drop_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE cash_accounts (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    currency VARCHAR NOT NULL,
+                    balance FLOAT NOT NULL DEFAULT 0,
+                    note TEXT,
+                    balance_at VARCHAR NOT NULL DEFAULT '2026-01-01',
+                    created_at VARCHAR NOT NULL DEFAULT '2026-01-01',
+                    updated_at VARCHAR NOT NULL DEFAULT '2026-01-01'
+                )
+                """
+            )
+        )
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+class TestMergingCashPots:
+    """The one migration that is not "add a column".
+
+    Cash became one balance per currency, and a database that holds two dong
+    balances has to be brought forward or the rule is a comment rather than a
+    fact. What must not happen is the money or the history disappearing, and
+    what must happen is a copy of the file being written first.
+    """
+
+    def insert_account(self, name: str, currency: str, balance: float) -> int:
+        with engine.begin() as connection:
+            return connection.execute(
+                text(
+                    "INSERT INTO cash_accounts (name, currency, balance) "
+                    "VALUES (:name, :currency, :balance)"
+                ),
+                {"name": name, "currency": currency, "balance": balance},
+            ).lastrowid
+
+    def test_two_dong_balances_become_one_with_the_money_added_up(self, old_cash_shape):
+        from app import cash, models
+        from app.database import merge_cash_pots
+
+        first = self.insert_account("Vietcombank", "VND", 10_000_000)
+        second = self.insert_account("Techcombank", "VND", 5_000_000)
+        self.insert_account("Wise", "USD", 2_400)
+
+        assert merge_cash_pots() != []
+
+        session = SessionLocal()
+        try:
+            assert [row.currency for row in cash.pots(session)] == ["VND", "USD"]
+            vnd = cash.pot(session, "VND")
+            assert vnd.id == first
+            assert vnd.balance == pytest.approx(15_000_000)
+            assert cash.pot(session, "USD").balance == pytest.approx(2_400)
+            assert session.query(models.CashAccount).count() == 2
+            assert session.get(models.CashAccount, second) is None
+        finally:
+            session.close()
+
+    def test_the_history_of_the_merged_pot_is_moved_not_lost(self, old_cash_shape):
+        """Deleting an account cascades to its movements. A merge that erased
+        half the cash history would be worse than the duplication it fixes."""
+        from app import models
+        from app.database import merge_cash_pots
+
+        first = self.insert_account("Vietcombank", "VND", 0)
+        second = self.insert_account("Techcombank", "VND", 0)
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    # `created_at` is written out because raw SQL does not
+                    # apply the model's Python-side default, as `insert_valuation_row`
+                    # above says.
+                    "INSERT INTO cash_movements (account_id, subject, action, "
+                    "holding_id, name, amount, currency, occurred_on, created_at) "
+                    "VALUES (:account, 'asset', 'buy', 1, 'VIC.VN', -1000, 'VND', "
+                    "'2026-01-01', '2026-01-01')"
+                ),
+                {"account": second},
+            )
+
+        merge_cash_pots()
+
+        session = SessionLocal()
+        try:
+            rows = session.query(models.CashMovement).all()
+            assert len(rows) == 1
+            assert rows[0].account_id == first
+        finally:
+            session.close()
+
+    def test_a_database_with_one_pot_of_each_currency_is_not_merged(self, old_cash_shape):
+        """Nothing is folded together — and both balances get the opening line
+        the history was missing, which is a different job from merging."""
+        from app import models
+        from app.database import merge_cash_pots
+
+        self.insert_account("Cash", "VND", 20_000_000)
+        self.insert_account("Wise", "USD", 100)
+
+        reported = merge_cash_pots()
+        assert reported == ["VND: +2e+07", "USD: +100"]
+
+        session = SessionLocal()
+        try:
+            assert session.query(models.CashAccount).count() == 2
+            assert [
+                row.name for row in session.query(models.CashAccount).all()
+            ] == ["Cash", "Wise"]
+            assert session.query(models.CashMovement).count() == 2
+        finally:
+            session.close()

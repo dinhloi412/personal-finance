@@ -24,10 +24,11 @@ import datetime
 from fastapi import APIRouter, Query, status
 from sqlalchemy import select
 
-from app import deposits, fx, models, settings_store, valuation
-from app.routers.deps import DbSession, get_or_404, refused
+from app import cash, deposits, fx, models, movements, settings_store, valuation
+from app.routers.deps import DbSession, cash_report, get_or_404, refused
 from app.schemas import (
     CashOut,
+    DeleteOut,
     DepositCreate,
     DepositOut,
     DepositRollRequest,
@@ -104,9 +105,27 @@ def create_deposit(payload: DepositCreate, db: DbSession) -> DepositOut:
         note=payload.note,
     )
     db.add(row)
+    # Flushed, not committed: with the cash link on, the principal leaves an
+    # account in the same request, and the two halves have to land together.
+    db.flush()
+
+    outcome = movements.spend(
+        db,
+        subject="deposit",
+        action="open",
+        name=row.name,
+        holding_id=row.id,
+        amount=float(row.principal),
+        currency=row.currency,
+        cash_amount=payload.cash_amount,
+        occurred_on=row.start_date,
+    )
     db.commit()
     db.refresh(row)
-    return _valued(db, row)
+
+    opened = _valued(db, row)
+    opened.cash = cash_report(db, outcome)
+    return opened
 
 
 @router.get("/{deposit_id}", response_model=DepositOut)
@@ -135,8 +154,28 @@ def read_schedule(deposit_id: int, db: DbSession) -> list[DepositOut]:
 
 @router.patch("/{deposit_id}", response_model=DepositOut)
 def update_deposit(deposit_id: int, payload: DepositUpdate, db: DbSession) -> DepositOut:
+    """Change the terms of a deposit.
+
+    An edited principal moves the **difference** into or out of cash: the money
+    the term holds changed, so the account it came from changed with it. Rate
+    and date changes move nothing — those are the contract's terms, not money.
+    """
     row = get_or_404(db, models.Deposit, deposit_id, "Deposit")
     fields = payload.model_dump(exclude_unset=True)
+    cash: movements.Outcome | None = None
+
+    if "principal" in fields:
+        before = float(row.principal or 0.0)
+        after = fields["principal"]
+        if after is not None and float(after) != before:
+            cash = movements.adjust(
+                db,
+                subject="deposit",
+                name=(fields.get("name") or row.name),
+                holding_id=row.id,
+                delta=float(after) - before,
+                currency=(fields.get("currency") or row.currency),
+                    )
 
     if "name" in fields and fields["name"]:
         fields["name"] = fields["name"].strip()
@@ -155,14 +194,29 @@ def update_deposit(deposit_id: int, payload: DepositUpdate, db: DbSession) -> De
     row.updated_at = models.utcnow_iso()
     db.commit()
     db.refresh(row)
-    return _valued(db, row)
+
+    updated = _valued(db, row)
+    if cash is not None:
+        updated.cash = cash_report(db, cash)
+    return updated
 
 
-@router.delete("/{deposit_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_deposit(deposit_id: int, db: DbSession) -> None:
+@router.delete("/{deposit_id}", response_model=DeleteOut)
+def delete_deposit(deposit_id: int, db: DbSession) -> DeleteOut:
+    """Remove a deposit, giving back what it still had in a cash account.
+
+    Deleting is not withdrawing: nothing is paid out and no interest is
+    credited. What comes back is the principal the account actually paid and
+    has not already had returned — which is the honest answer for "I recorded
+    this by mistake" as well as for "it moved and I will fix the cash myself".
+    """
     row = get_or_404(db, models.Deposit, deposit_id, "Deposit")
+    outcome = movements.refund(
+        db, subject="deposit", holding_id=row.id, name=row.name
+    )
     db.delete(row)
     db.commit()
+    return DeleteOut(removed_id=deposit_id, cash=cash_report(db, outcome))
 
 
 @router.post("/{deposit_id}/roll", response_model=DepositOut)
@@ -217,31 +271,53 @@ def roll_deposit(
 def withdraw_deposit(
     deposit_id: int, payload: DepositWithdrawRequest, db: DbSession
 ) -> DepositWithdrawOut:
-    """Close a deposit and record the proceeds as cash, in one request.
+    """Close a deposit and put the money back into cash, in one request.
 
     The deposit is deleted rather than kept at zero: a closed term is not
     something the user holds, and a list of zeroed rows is a list of things to
     scroll past.
+
+    **Where it lands is not a decision.** The pot of the deposit's own currency
+    is the only cash there is (`app.cash`), so the proceeds accumulate there —
+    a term deposit is the same money coming back, not a new pile of it. This is
+    the one movement that happens whether or not the cash link is on: with the
+    link off the balance still has to change, and there is no longer an account
+    to invent for it. Leaving the money arriving with no line of history would
+    be a balance that changed for no stated reason, which is the thing the
+    history exists to prevent.
     """
     row = get_or_404(db, models.Deposit, deposit_id, "Deposit")
     computed = deposits.value_deposit(row)
     amount = payload.balance if payload.balance is not None else computed.value
 
-    account = models.CashAccount(
-        name=(payload.account_name or row.name).strip(),
+    outcome = movements.receive(
+        db,
+        subject="deposit",
+        action="close",
+        name=row.name,
+        holding_id=row.id,
+        amount=amount,
         currency=row.currency,
-        balance=amount,
+        occurred_on=models.today_iso(),
         note=row.note,
+        # The one movement that ignores the switch: the money is arriving and
+        # the pot is the only place it can go.
+        force=True,
     )
-    db.add(account)
     db.delete(row)
     db.commit()
-    db.refresh(account)
+
+    account = (
+        db.get(models.CashAccount, outcome.movement.account_id)
+        if outcome.movement is not None
+        else cash.pot(db, row.currency)
+    )
 
     base = settings_store.base_currency(db)
     converter = fx.Converter(session=db, base=base)
     return DepositWithdrawOut(
         closed_deposit_id=deposit_id,
-        cash=CashOut.model_validate(valuation.value_cash(account, converter)),
+        account=CashOut.model_validate(valuation.value_cash(account, converter)),
         amount=amount,
+        cash=cash_report(db, outcome),
     )

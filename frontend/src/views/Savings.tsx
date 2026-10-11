@@ -32,11 +32,13 @@ import {
   withdrawDeposit,
 } from "../api/client";
 import type {
+  CashMoveOut,
   Currency,
   Deposit,
   DepositInput,
   Lang,
 } from "../api/types";
+import { CashMoveFields, CashMoveNotice } from "../components/CashMove";
 import {
   CURRENCIES,
   DASH,
@@ -135,9 +137,12 @@ function CurrencySelect({
 function DepositForm({
   deposit,
   onClose,
+  onSaved,
 }: {
   deposit: Deposit | null;
   onClose: () => void;
+  /** The row as the server stored it, so the page can report the cash side. */
+  onSaved: (saved: Deposit) => void;
 }) {
   const { t, lang } = useI18n();
   const app = useApp();
@@ -159,6 +164,7 @@ function DepositForm({
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cashAmount, setCashAmount] = useState("");
 
   const amount = parseAmount(principal, lang);
   const rateValue = parseAmount(rate, lang);
@@ -182,13 +188,16 @@ function DepositForm({
       maturity_date: demand ? null : maturity,
       interest_mode: "at_maturity",
       note: note.trim() || null,
+      // On an edit the server moves the difference in principal itself: a
+      // second amount here would be a number the app kept two opinions about.
+      cash_amount: deposit === null ? parseAmount(cashAmount, lang) : null,
     };
 
     try {
       if (deposit) {
-        await updateDeposit(deposit.id, body);
+        onSaved(await updateDeposit(deposit.id, body));
       } else {
-        await createDeposit(body);
+        onSaved(await createDeposit(body));
       }
       // The overview total contains these deposits, so it is re-read rather
       // than left to disagree with this page.
@@ -280,6 +289,23 @@ function DepositForm({
             onChange={(event) => setMaturity(event.target.value)}
             error={attempted && datesInvalid ? t("dep.dates_invalid") : undefined}
           />
+        )}
+
+        {/* The principal is money that leaves an account, so it is the amount
+            the cash link moves. A deposit in dollars from a dong account is
+            converted, and the figure is editable. */}
+        {deposit === null ? (
+          <CashMoveFields
+            direction="out"
+            amount={amount}
+            currency={currency}
+            cashAmount={cashAmount}
+            onCashAmount={setCashAmount}
+          />
+        ) : (
+          <p className="text-xs leading-relaxed text-slate-500">
+            {t("move.edit_note")}
+          </p>
         )}
 
         <Textarea
@@ -398,13 +424,13 @@ function WithdrawForm({
 }: {
   deposit: Deposit;
   onClose: () => void;
-  onDone: (closing: number, amount: number) => void;
+  onDone: (closing: number, amount: number, cash: CashMoveOut | null) => void;
 }) {
   const { t, lang } = useI18n();
   const app = useApp();
 
-  const [account, setAccount] = useState(deposit.name);
   const [amount, setAmount] = useState(String(Math.round(deposit.value)));
+  const [cashAmount, setCashAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -415,12 +441,12 @@ function WithdrawForm({
     setSaving(true);
     setError(null);
     try {
-      await withdrawDeposit(deposit.id, {
-        account_name: account.trim() || deposit.name,
+      const closed = await withdrawDeposit(deposit.id, {
         balance: parsed,
+        cash_amount: parsed,
       });
       await app.refresh();
-      onDone(deposit.id, parsed);
+      onDone(deposit.id, parsed, closed.cash);
     } catch (cause) {
       setError(messageOf(cause));
     } finally {
@@ -447,15 +473,19 @@ function WithdrawForm({
         <p className="text-xs leading-relaxed text-slate-500">
           {t("dep.withdraw_hint")}
         </p>
-        <Input
-          label={t("dep.withdraw_account")}
-          value={account}
-          onChange={(event) => setAccount(event.target.value)}
-        />
         <NumberInput
           label={t("dep.withdraw_amount")}
           value={amount}
           onValueChange={setAmount}
+        />
+        {/* Where it lands is not a decision: the pot of the deposit's own
+            currency, which is the only cash there is. */}
+        <CashMoveFields
+          direction="in"
+          amount={parsed}
+          currency={deposit.currency}
+          cashAmount={cashAmount}
+          onCashAmount={setCashAmount}
         />
       </div>
     </Modal>
@@ -541,6 +571,8 @@ export function Savings() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** What the last trade did to a cash balance, or why it did nothing. */
+  const [cashNotice, setCashNotice] = useState<CashMoveOut | null>(null);
 
   const portfolio = app.portfolio;
   if (!portfolio) return <Spinner label={t("state.loading")} />;
@@ -563,8 +595,9 @@ export function Savings() {
     if (removing === null) return;
     setBusy(true);
     try {
-      await deleteDeposit(removing.id);
+      const removed = await deleteDeposit(removing.id);
       await app.refresh();
+      setCashNotice(removed.cash);
       setRemoving(null);
       setError(null);
     } catch (cause) {
@@ -586,6 +619,8 @@ export function Savings() {
 
   return (
     <div className="space-y-4">
+      <CashMoveNotice cash={cashNotice} />
+
       {error && (
         <Notice
           tone="error"
@@ -814,6 +849,7 @@ export function Savings() {
       {formOpen && (
         <DepositForm
           deposit={editing}
+          onSaved={(saved) => setCashNotice(saved.cash)}
           onClose={() => {
             setFormOpen(false);
             setEditing(null);
@@ -836,8 +872,9 @@ export function Savings() {
         <WithdrawForm
           deposit={withdrawing}
           onClose={() => setWithdrawing(null)}
-          onDone={(_id, amount) => {
+          onDone={(_id, amount, cash) => {
             setWithdrawing(null);
+            setCashNotice(cash);
             setStatus(t("dep.withdraw_done", { amount }));
           }}
         />

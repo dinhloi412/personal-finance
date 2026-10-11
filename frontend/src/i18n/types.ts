@@ -30,6 +30,7 @@ export interface Dict {
   "action.save": string;
   "action.cancel": string;
   "action.edit": string;
+  "action.sell": string;
   "action.delete": string;
   "action.confirm": string;
   "action.refresh": string;
@@ -80,6 +81,13 @@ export interface Dict {
   "dash.gain": string;
   "dash.gain_pct": string;
   "dash.gain_unknown": string;
+  "dash.unrealized": string;
+  "dash.realized": string;
+  "dash.realized_count": string;
+  "dash.realized_unknown": string;
+  "dash.total_gain": string;
+  "dash.total_gain_pct": string;
+  "dash.total_hint": string;
   "dash.allocation": string;
   "dash.allocation_hint": string;
   "dash.exposure": string;
@@ -133,6 +141,32 @@ export interface Dict {
   "hold.none_body": string;
   "hold.none_filtered": string;
 
+  // -- selling a position ---------------------------------------------------
+  "sell.title": string;
+  "sell.quantity": string;
+  "sell.quantity_hint": string;
+  "sell.too_many": string;
+  "sell.all": string;
+  "sell.proceeds": string;
+  "sell.proceeds_hint": string;
+  "sell.market_hint": string;
+  "sell.sold_on": string;
+  "sell.cost_note": string;
+  "sell.no_cost": string;
+  "sell.confirm": string;
+  "sell.failed": string;
+  "sell.done": string;
+
+  // -- what has been sold ---------------------------------------------------
+  "hold.realized_title": string;
+  "hold.realized_hint": string;
+  "hold.sold_on": string;
+  "hold.proceeds": string;
+  "hold.cost_removed": string;
+  "hold.delete_sale_title": string;
+  "hold.delete_sale_confirm": string;
+  "hold.delete_sale_action": string;
+
   // -- the position form ----------------------------------------------------
   "form.add_title": string;
   "form.edit_title": string;
@@ -145,6 +179,7 @@ export interface Dict {
   "form.currency": string;
   "form.currency_hint": string;
   "form.note": string;
+  "form.invalid": string;
   "form.required": string;
   "form.save_failed": string;
 
@@ -156,8 +191,37 @@ export interface Dict {
   "pick.degraded": string;
 
   // -- cash -----------------------------------------------------------------
+  "cash.move_log": string;
+  "cash.move_log_hint": string;
+  "cash.move_log_empty": string;
+  "cash.move_account": string;
+  "cash.move_all": string;
+  "cash.move_what": string;
+  "cash.move_date": string;
+  "cash.move_amount": string;
+  "cash.move_history": string;
+  "move.from": string;
+  "move.to": string;
+  "move.amount": string;
+  "move.amount_hint": string;
+  "move.edit_note": string;
+  "move.done_out": string;
+  "move.done_in": string;
+  "move.balance_after": string;
+  "move.skipped": string;
+  "move.skip.link_off": string;
+  "move.skip.no_amount": string;
+  "move.skip.no_account": string;
+  "move.skip.no_rate": string;
+  "move.skip.nothing_paid": string;
+  "move.action.buy": string;
+  "move.action.sell": string;
+  "move.action.open": string;
+  "move.action.close": string;
+  "move.action.adjust": string;
+  "move.action.refund": string;
+  "cash.pot": string;
   "cash.title": string;
-  "cash.add": string;
   "cash.manual_note": string;
   "cash.name": string;
   "cash.balance": string;
@@ -166,13 +230,24 @@ export interface Dict {
   "cash.value_in_base": string;
   "cash.subtotal": string;
   "cash.edit_title": string;
-  "cash.delete_confirm": string;
-  "cash.delete_title": string;
-  "cash.delete_action": string;
   "cash.edit_balance": string;
+  "cash.add_entry": string;
+  "cash.entry_title": string;
+  "cash.entry_hint": string;
+  "cash.entry_direction": string;
+  "cash.entry_in": string;
+  "cash.entry_out": string;
+  "cash.entry_amount": string;
+  "cash.entry_date": string;
+  "cash.entry_reason": string;
+  "cash.entry_reason_hint": string;
+  "cash.entry_done_in": string;
+  "cash.entry_done_out": string;
+  "cash.entry_failed": string;
+  "cash.adjust_line": string;
+  "move.action.in": string;
+  "move.action.out": string;
   "cash.balance_saved": string;
-  "cash.none_title": string;
-  "cash.none_body": string;
   "cash.total": string;
 
   // -- savings (term deposits) ---------------------------------------------
@@ -210,7 +285,6 @@ export interface Dict {
   "dep.withdraw": string;
   "dep.withdraw_title": string;
   "dep.withdraw_hint": string;
-  "dep.withdraw_account": string;
   "dep.withdraw_amount": string;
   "dep.withdraw_done": string;
   "dep.edit_title": string;
@@ -293,6 +367,11 @@ export interface Dict {
 
   // -- settings -------------------------------------------------------------
   "set.title": string;
+  "set.cash_linked": string;
+  "set.cash_linked_hint": string;
+  "set.cash_linked_on": string;
+  "set.cash_linked_off": string;
+  "set.cash_linked_note": string;
   "set.language": string;
   "set.language_hint": string;
   "set.base_currency": string;

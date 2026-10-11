@@ -37,8 +37,8 @@ relative paths and there is no CORS surface in either mode.
 ### Tests
 
 ```bash
-cd backend  && uv run pytest      # 248 tests, no network access
-cd frontend && pnpm test          # 23 tests: formatters, dictionaries, layout
+cd backend  && uv run pytest      # 360 tests, no network access
+cd frontend && pnpm test          # 24 tests: formatters, dictionaries, layout
 
 # and, against a running server with the real network:
 ./scripts/acceptance.sh           # the acceptance criteria from docs/SPEC.md §9
@@ -62,10 +62,39 @@ because they are not the same kind of fact. A position carries a quantity and,
 optionally, what it cost; leave the cost blank and gain is reported as unknown
 rather than invented.
 
-**Cash** — a name, a currency, a balance. When the money moves you edit the
-number in place, in one action, and the date it was written down is stamped
-alongside it. This is intentional: a ledger nobody maintains is worse than a
-balance everybody updates.
+**Selling** — a position can be sold in part or in full: you say how many units
+went and how much money came back, and the cost it released is worked out in
+proportion to what was sold (a position stores one total cost, not a list of
+purchases, so proportional is the only answer that is not a guess). The gain is
+then **kept**: the sale stays in a short list of closed trades under the table,
+and the Overview adds it to the gain still unrealised, so selling a loser does
+not make the loss disappear from the page.
+
+**Cash** — **one balance per currency**: a balance in đồng and a balance in
+dollars, there from the first time you look, never added to and never removed.
+Money goes in and comes out from the page itself — an amount, a direction, a day
+and a reason ("Lương tháng 10", "Tiền nhà") — and when you would rather just
+type the number, editing the balance in place is still one action. The reason is
+free text on purpose: no category, no month, no total by type, because that is
+the budgeting tool this app deliberately is not.
+
+Every change to a balance leaves a **line**: a trade, money you put in or took
+out, and the difference when you count your money and it is not what the page
+said. So the figure at the top is the sum of the lines under it — including for
+money that was in the pot before there were any lines, which gets one opening
+line of its own rather than being a silent starting number.
+
+**Cash-linked trades** — one switch in Settings, **off by default**. With it off,
+cash and holdings are two facts you type, which is what entering a portfolio you
+already own requires: nobody bought those shares out of the balance you are
+about to write down. Turn it on and every later trade moves money and leaves a
+line — buying takes the cost out of the balance in that trade's own currency,
+selling puts the proceeds back, opening a term deposit moves the principal and
+maturing one pays it back into the same balance. Editing what something cost
+moves the difference, and deleting a holding gives back what the balance
+actually paid and has not already had returned. A trade quoted in a currency
+there is no balance in — a EUR listing — is reported rather than converted at an
+invented rate.
 
 **Gold** — Vietnamese gold, priced the way it is actually bought and sold: by
 the **chỉ**, at **Bảo Tín Minh Châu's published price** for the exact product
@@ -92,9 +121,10 @@ counted twice.
 readable: the session a close belongs to, when it was fetched, and whether a
 rate is a published one or the placeholder used offline.
 
-**Settings** — the display currency and the language, the path to your database
-file so you know what to back up, and a wipe that deletes every record behind a
-confirmation (keeping your settings and the cached rates).
+**Settings** — the display currency, the language and whether trades move cash,
+the path to your database file so you know what to back up, and a wipe that
+deletes every record behind a confirmation (keeping your settings and the cached
+rates).
 
 Refreshing is one button in the header. What it did is then reported under it,
 per symbol: a feed that answered for nineteen holdings and not the twentieth is
@@ -123,6 +153,31 @@ Three rules, each of which is enforced in code and covered by tests:
    name, normalised to one unit, and a line whose weight cannot be read is
    dropped rather than guessed at — and the page shows both the shop's published
    figure and the price per unit held.
+6. **Closing a position moves the gain, it does not erase it.** Writing a sale
+   down is what keeps the total honest: selling a position at the market price
+   leaves the portfolio's total gain *exactly* where it was, with the figure
+   simply moved from "unrealised" to "realised". Without that record the loss
+   would vanish from the page the moment the position left the table — the one
+   way this app could be used to tell yourself a story. The test for it is
+   `backend/tests/test_realized.py::TestTheDashboardTotals`.
+7. **Moving money between two tables changes neither.** With the cash link on,
+   a purchase takes from a balance and a sale puts back; the balance and the
+   history are written from one number, so they cannot disagree, and a delete
+   refunds what the balance actually paid rather than what the holding is
+   measured against — otherwise a partly-sold position would print money on the
+   way out.
+8. **A balance is the sum of its history.** Every change writes a line — a
+   trade, money in or out, or the correction when a counted balance differs —
+   and money that predates the history gets one opening line rather than a
+   silent figure. `GET /api/portfolio` returns the lines; the Cash page prints
+   one figure and claims it is their sum, and that claim is tested.
+9. **A balance cannot be split, and an old one is not rewritten in silence.**
+   Cash is one pot per currency, so a trade has no account to be recorded in by
+   mistake. A database from before that rule — two dong balances, say — is
+   merged at startup, and a copy of the file is written beside it first: the
+   balances are added up, the movement history is carried across rather than
+   cascaded away, and the merge is logged. See `merge_cash_pots` in
+   `backend/app/database.py`.
 
 ## Supported symbols
 
@@ -167,6 +222,11 @@ Deliberately **not** here, in contrast to the project this was reduced from:
 - income, expenses, budgets, cash-flow analysis
 - debts, liabilities, mortgages, real assets, insurance, pensions
 - look-through composition, dividends, tax reporting
+- a transaction ledger: a sale is recorded, and so is each movement of a cash
+  balance, but the buys behind a position are not — a position carries one total
+  cost, which is why a partial sale releases a proportional part of it
+- separate cash accounts per bank: one balance per currency, because a user has
+  a bank balance, not a list of piles to choose between
 - accounts, sync, multi-user; anything that leaves this machine
 - currencies other than VND and USD
 
@@ -178,17 +238,21 @@ Deliberately **not** here, in contrast to the project this was reduced from:
 backend/app/
   money.py          the shared vocabulary: currencies, kinds, languages
   database.py       SQLite engine, session, the instrument-registering hook
-  models.py         the eight tables
+  models.py         the nine tables
   market.py         Yahoo Finance: what a symbol is, what it closed at
   fx.py             rates, and the rule that keeps a total honest
+  cash.py           one cash balance per currency, and merging older ones
   deposits.py       term deposits: the interest arithmetic, in one place
+  realized.py       selling: the proportional cost a sale releases, in one place
+  movements.py      cash in and out: one signed movement per trade, in one place
   gold.py           Vietnamese gold: the shop's payload, the units, the prices
   net.py            one HTTPS helper, because one feed needs certifi
   funds.py          open-ended funds: NAVs from Fmarket, and the alias table
   valuation.py      what it is all worth, in one currency
   pricing.py        refreshing, and reporting per-symbol failures
   settings_store.py the display currency and the language
-  routers/          assets, cash, deposits, gold, portfolio, market, settings
+  routers/          assets, realized, cash, deposits, gold, portfolio, market,
+                    settings
 
 frontend/src/
   api/              one function per endpoint, and the types it returns

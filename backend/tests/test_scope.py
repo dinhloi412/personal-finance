@@ -83,8 +83,10 @@ class TestScope:
             "/api/assets",
             "/api/assets/{asset_id}",
             "/api/assets/{asset_id}/price",
+            "/api/assets/{asset_id}/sell",
             "/api/cash",
             "/api/cash/{account_id}",
+            "/api/cash/{account_id}/entry",
             "/api/deposits",
             "/api/deposits/{deposit_id}",
             "/api/deposits/{deposit_id}/roll",
@@ -104,6 +106,8 @@ class TestScope:
             "/api/portfolio/snapshot",
             "/api/prices",
             "/api/prices/refresh",
+            "/api/realized",
+            "/api/realized/{sale_id}",
             "/api/refresh",
             "/api/settings",
             "/api/settings/wipe",
@@ -127,13 +131,24 @@ class TestClosedSets:
     def test_the_schema_refuses_a_currency_the_app_cannot_hold(self):
         from pydantic import ValidationError
 
-        from app.schemas import AssetCreate, CashCreate
+        from app.schemas import AssetCreate, CashUpdate, DepositCreate
 
         for currency in ("EUR", "GBP", "JPY", "vnd "):
             with pytest.raises(ValidationError):
-                CashCreate(name="x", currency=currency, balance=1)
+                AssetCreate(symbol="X", kind="stock", quantity=1, currency=currency)
         with pytest.raises(ValidationError):
             AssetCreate(symbol="X", kind="stock", quantity=1, currency="EUR")
+        with pytest.raises(ValidationError):
+            DepositCreate(
+                name="x",
+                currency="EUR",
+                principal=1,
+                annual_rate=1,
+                start_date="2026-01-01",
+            )
+        # A pot's currency is not a field at all any more: it is the pot's
+        # identity, and there are exactly two of them.
+        assert "currency" not in CashUpdate.model_fields
 
     def test_the_schema_refuses_a_kind_the_app_does_not_track(self):
         from pydantic import ValidationError

@@ -1,7 +1,7 @@
 """The vocabulary the whole app shares: what can be held, in what, and how it
 is spoken about.
 
-Four closed sets, defined once and imported everywhere, because each of them
+Six closed sets, defined once and imported everywhere, because each of them
 is enforced in four places (schema, ORM, valuation, UI) and four copies of a
 list is four chances for the fifth entry to reach only three of them.
 
@@ -11,6 +11,10 @@ list is four chances for the fifth entry to reach only three of them.
   things that have no feed behind them — cash, which the user counts, and a
   term deposit, whose value is computed from its own terms.
 - `LANGUAGES`: what the interface may be read in.
+- `SUBJECT_KINDS`: what a cash movement can be caused by — a trade in one of
+  the three kinds of holding, or the cash page itself when money comes in or
+  goes out for a reason that is not an investment (a salary, a bill).
+- `FLOW_ACTIONS`: what that movement was.
 
 `MARKET_KINDS` deliberately excludes cash and deposits: neither has a symbol,
 a quote or a cost basis, so anything that loops over market kinds must not be
@@ -25,6 +29,25 @@ Currency = Literal["VND", "USD"]
 BaseCurrency = Literal["VND", "USD"]
 MarketKind = Literal["stock", "fund", "crypto"]
 AssetKind = Literal["stock", "fund", "crypto", "cash", "deposit", "gold"]
+#: What can move money in or out of a cash balance. `cash` is the odd one: not
+#: a holding, but the user putting money in or taking it out themselves, which
+#: the app records so that a balance always has a history behind it.
+SubjectKind = Literal["asset", "gold", "deposit", "cash"]
+#: Why a cash movement happened. Kept structured rather than as a written
+#: sentence, because the sentence has to exist in two languages.
+#:
+#: - `buy` / `sell`: a market position bought or sold.
+#: - `open` / `close`: a term deposit opened, or paid out at maturity.
+#: - `adjust`: a corrected figure, where only the difference moved — an edited
+#:   cost basis or principal, or a balance the user counted and found different.
+#: - `refund`: a holding deleted. The money that had actually left the account
+#:   for it comes back; see `app.movements.net_invested`.
+#: - `in` / `out`: money the user says entered or left a cash balance, with no
+#:   holding behind it. There is no category here on purpose: a reason is free
+#:   text, not a budget line (see docs/SPEC.md §1.2).
+FlowAction = Literal[
+    "buy", "sell", "open", "close", "adjust", "refund", "in", "out"
+]
 #: The weights gold is actually bought and sold in. An ounce is the world
 #: market's unit; a chỉ and a lượng are Vietnam's, and a lượng is ten chỉ by
 #: definition — which is why the two are defined from one number below.
@@ -56,6 +79,8 @@ CURRENCIES: Final[tuple[Currency, ...]] = get_args(Currency)
 BASE_CURRENCIES: Final[tuple[BaseCurrency, ...]] = get_args(BaseCurrency)
 MARKET_KINDS: Final[tuple[MarketKind, ...]] = get_args(MarketKind)
 ASSET_KINDS: Final[tuple[AssetKind, ...]] = get_args(AssetKind)
+SUBJECT_KINDS: Final[tuple[SubjectKind, ...]] = get_args(SubjectKind)
+FLOW_ACTIONS: Final[tuple[FlowAction, ...]] = get_args(FlowAction)
 GOLD_UNITS: Final[tuple[GoldUnit, ...]] = get_args(GoldUnit)
 GOLD_PRICINGS: Final[tuple[GoldPricing, ...]] = get_args(GoldPricing)
 LANGUAGES: Final[tuple[Language, ...]] = get_args(Language)

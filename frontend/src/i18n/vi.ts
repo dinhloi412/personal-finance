@@ -17,7 +17,7 @@ import type { Dict } from "./types";
 export const vi: Dict = {
   // -- identity -------------------------------------------------------------
   "app.name": "Sổ Tài Sản",
-  "app.tagline": "Theo dõi cổ phiếu, quỹ, coin, tiền mặt và tiết kiệm",
+  "app.tagline": "Cổ phiếu, quỹ, coin, tiền mặt và tiết kiệm",
   "app.offline_note":
     "Dữ liệu nằm trên máy của bạn. Chỉ có giá thị trường và tỷ giá được lấy từ internet.",
 
@@ -33,6 +33,7 @@ export const vi: Dict = {
   // -- generic actions ------------------------------------------------------
   "action.save": "Lưu",
   "action.cancel": "Huỷ",
+  "action.sell": "Bán",
   "action.edit": "Sửa",
   "action.delete": "Xoá",
   "action.confirm": "Xác nhận",
@@ -84,6 +85,13 @@ export const vi: Dict = {
   "dash.gain": "Lãi/lỗ",
   "dash.gain_pct": "Tỷ lệ lãi/lỗ",
   "dash.gain_unknown": "Chưa tính được vì có vị thế thiếu giá vốn",
+  "dash.unrealized": "Chưa thực hiện",
+  "dash.realized": "Lãi/lỗ đã thực hiện",
+  "dash.realized_count": "{count} lệnh đã bán",
+  "dash.realized_unknown": "Chưa tính được vì có lệnh bán thiếu giá vốn",
+  "dash.total_gain": "Tổng lãi/lỗ",
+  "dash.total_gain_pct": "Tỷ lệ tổng",
+  "dash.total_hint": "Chưa thực hiện + đã thực hiện",
   "dash.allocation": "Cơ cấu theo loại",
   "dash.allocation_hint": "Tỷ trọng từng loại tài sản trong tổng giá trị",
   "dash.exposure": "Theo loại tiền",
@@ -144,6 +152,37 @@ export const vi: Dict = {
     "Thêm cổ phiếu, quỹ hoặc coin đầu tiên. Giá sẽ được lấy tự động từ thị trường.",
   "hold.none_filtered": "Không có vị thế nào khớp với bộ lọc hiện tại.",
 
+  // -- selling a position ---------------------------------------------------
+  "sell.title": "Bán {symbol}",
+  "sell.quantity": "Khối lượng bán",
+  "sell.quantity_hint": "Đang giữ {quantity}. Bán một phần hoặc toàn bộ.",
+  "sell.too_many": "Không thể bán nhiều hơn số đang giữ.",
+  "sell.all": "Bán toàn bộ",
+  "sell.proceeds": "Số tiền nhận được",
+  "sell.proceeds_hint":
+    "Tổng tiền thực nhận bằng {currency}, không phải giá mỗi đơn vị.",
+  "sell.market_hint": "Giá thị trường của phần này: {amount}",
+  "sell.sold_on": "Ngày bán",
+  "sell.cost_note":
+    "Giá vốn được trừ theo đúng tỷ lệ phần đã bán, không phải toàn bộ giá vốn.",
+  "sell.no_cost":
+    "Vị thế này chưa ghi giá vốn, nên lãi/lỗ của lệnh bán sẽ không tính được. Lệnh bán vẫn được ghi lại.",
+  "sell.confirm": "Xác nhận bán",
+  "sell.failed": "Không ghi được lệnh bán",
+  "sell.done": "Đã ghi nhận lệnh bán {symbol}",
+
+  // -- what has been sold ---------------------------------------------------
+  "hold.realized_title": "Đã bán",
+  "hold.realized_hint":
+    "Lãi/lỗ đã chốt. Vẫn được giữ lại kể cả khi vị thế đã bán hết.",
+  "hold.sold_on": "Ngày bán",
+  "hold.proceeds": "Tiền nhận",
+  "hold.cost_removed": "Giá vốn đã trừ",
+  "hold.delete_sale_title": "Xoá lệnh bán",
+  "hold.delete_sale_confirm":
+    "Lệnh bán {symbol} ngày {date} sẽ bị xoá khỏi lịch sử. Vị thế đã bán sẽ không được khôi phục.",
+  "hold.delete_sale_action": "Xoá lệnh bán này",
+
   // -- the position form ----------------------------------------------------
   "form.add_title": "Thêm vị thế",
   "form.edit_title": "Sửa vị thế",
@@ -158,6 +197,7 @@ export const vi: Dict = {
   "form.currency": "Tiền tệ của giá vốn",
   "form.currency_hint": "Chỉ hỗ trợ VNĐ và USD.",
   "form.note": "Ghi chú",
+  "form.invalid": "Không hợp lệ",
   "form.required": "Bắt buộc",
   "form.save_failed": "Không lưu được",
 
@@ -170,25 +210,74 @@ export const vi: Dict = {
     "Không kết nối được nguồn tìm kiếm. Bạn vẫn có thể nhập thẳng mã ở ô trên.",
 
   // -- cash -----------------------------------------------------------------
+  "cash.pot": "Tiền mặt {currency}",
   "cash.title": "Tiền mặt",
-  "cash.add": "Thêm khoản tiền mặt",
+  "move.from": "Trừ từ",
+  "move.to": "Cộng vào",
+  "move.amount": "Số tiền {currency}",
+  "move.amount_hint":
+    "Số tiền thực sự rời khỏi (hoặc vào) tài khoản. Sửa được nếu ngân hàng báo khác.",
+  "move.edit_note": "Sửa tổng giá vốn sẽ trừ/cộng phần chênh lệch vào tài khoản đã trả cho khoản này.",
+  "move.done_out": "Đã trừ {amount} từ {account}",
+  "move.done_in": "Đã cộng {amount} vào {account}",
+  "move.balance_after": "Số dư còn {amount}",
+  "move.skipped": "Không trừ/cộng tiền mặt lần này",
+  "move.skip.link_off": "Chế độ nối tiền mặt đang tắt.",
+  "move.skip.no_amount": "Không có giá vốn nên không có gì để trừ.",
+  "move.skip.no_account":
+    "Chưa có sổ tiền mặt nào. Mở trang Tiền mặt để tạo.",
+  "move.skip.no_rate":
+    "Không có tỷ giá giữa hai loại tiền này, nên không tự quy đổi được.",
+  "move.skip.nothing_paid":
+    "Khoản này chưa từng được chi từ tiền mặt, nên không hoàn lại gì.",
+  "cash.move_log": "Lịch sử giao dịch",
+  "cash.move_log_hint":
+    "Mỗi dòng là một lần tiền vào hoặc ra khỏi một sổ, kèm lý do. Số dư ở trên là kết quả của những dòng này cộng với số bạn tự sửa.",
+  "cash.move_log_empty": "Chưa có giao dịch nào.",
+  "cash.move_account":
+    "Sổ",
+  "cash.move_all":
+    "Cả hai sổ",
+  "cash.move_what": "Nội dung",
+  "cash.move_date": "Ngày",
+  "cash.move_amount": "Số tiền",
+  "cash.move_history": "Lịch sử",
+  "move.action.buy": "Mua {name}",
+  "move.action.sell": "Bán {name}",
+  "move.action.open": "Gửi tiết kiệm {name}",
+  "move.action.close": "Tất toán {name}",
+  "move.action.adjust": "Điều chỉnh {name}",
+  "move.action.refund": "Hoàn tiền {name}",
   "cash.manual_note":
-    "Tiền mặt là số dư bạn tự ghi lại. Khi tiền biến động, sửa trực tiếp vào ô số dư — chỉ một thao tác.",
-  "cash.name": "Tên",
+    "Mỗi loại tiền có đúng một sổ, và đó là số dư bạn tự ghi lại. Khi tiền biến động, sửa trực tiếp vào ô số dư — hoặc để các giao dịch tự cộng/trừ khi bạn bật chế độ nối tiền mặt.",
+  "cash.name":
+    "Tên sổ",
   "cash.balance": "Số dư",
   "cash.balance_at": "Ghi ngày",
   "cash.note": "Ghi chú",
   "cash.value_in_base": "Quy đổi",
   "cash.subtotal": "Tổng theo loại tiền",
-  "cash.edit_title": "Sửa khoản tiền mặt",
-  "cash.delete_confirm": "Xoá khoản tiền mặt {name}?",
-  "cash.delete_title": "Xoá khoản tiền mặt",
-  "cash.delete_action": "Xoá khoản này",
+  "cash.edit_title":
+    "Sửa sổ tiền mặt",
   "cash.edit_balance": "Sửa số dư",
+  "cash.add_entry": "Nạp / rút tiền",
+  "cash.entry_title": "Nạp hoặc rút tiền",
+  "cash.entry_hint":
+    "Ghi lại tiền vào hoặc ra khỏi sổ này — lương, hoá đơn, tiền người khác trả. Không phải giao dịch đầu tư, nên chỉ cần một lý do, không phân loại.",
+  "cash.entry_direction": "Chiều tiền",
+  "cash.entry_in": "Cộng vào sổ",
+  "cash.entry_out": "Trừ khỏi sổ",
+  "cash.entry_amount": "Số tiền",
+  "cash.entry_date": "Ngày",
+  "cash.entry_reason": "Lý do",
+  "cash.entry_reason_hint": "Ví dụ: Lương tháng 10, Tiền nhà, Bán xe.",
+  "cash.entry_done_in": "Đã cộng {amount} vào {name}",
+  "cash.entry_done_out": "Đã trừ {amount} khỏi {name}",
+  "cash.entry_failed": "Không ghi được",
+  "cash.adjust_line": "Điều chỉnh số dư",
+  "move.action.in": "Nạp tiền",
+  "move.action.out": "Rút tiền",
   "cash.balance_saved": "Đã lưu số dư",
-  "cash.none_title": "Chưa có khoản tiền mặt nào",
-  "cash.none_body":
-    "Thêm tài khoản ngân hàng hoặc ví đầu tiên, kèm số dư hiện tại.",
   "cash.total": "Tổng quy đổi",
 
   // -- savings (term deposits) ---------------------------------------------
@@ -231,7 +320,6 @@ export const vi: Dict = {
   "dep.withdraw_title": "Tất toán khoản tiết kiệm",
   "dep.withdraw_hint":
     "Khoản tiết kiệm sẽ được đóng lại và số tiền chuyển thành một khoản tiền mặt, trong cùng một bước.",
-  "dep.withdraw_account": "Ghi vào khoản tiền mặt",
   "dep.withdraw_amount": "Số tiền nhận được",
   "dep.withdraw_done": "Đã tất toán {amount}",
   "dep.edit_title": "Sửa khoản tiết kiệm",
@@ -335,6 +423,13 @@ export const vi: Dict = {
   "set.version": "Phiên bản",
   "set.database": "Tệp dữ liệu",
   "set.database_hint": "Sao lưu tệp này là sao lưu toàn bộ dữ liệu của bạn.",
+  "set.cash_linked": "Tự trừ và cộng vào tiền mặt",
+  "set.cash_linked_hint":
+    "Khi bật, mỗi thao tác ở Danh mục, Tiết kiệm và Vàng sẽ tự trừ hoặc cộng vào sổ tiền mặt đúng loại tiền của giao dịch, và để lại một dòng lịch sử. Để tắt trong lúc nhập dữ liệu ban đầu: khi đó tiền mặt và tài sản là hai con số bạn tự nhập, không liên quan tới nhau.",
+  "set.cash_linked_on": "Đang bật",
+  "set.cash_linked_off": "Đang tắt",
+  "set.cash_linked_note":
+    "Chỉ áp dụng cho thao tác từ lúc bật trở đi. Dữ liệu đã nhập trước đó không bị thay đổi.",
   "set.danger": "Xoá dữ liệu",
   "set.danger_hint":
     "Xoá toàn bộ vị thế, số dư tiền mặt và các mốc đã ghi. Cài đặt và giá đã lưu vẫn giữ lại. Không hoàn tác được.",

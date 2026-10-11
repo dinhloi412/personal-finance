@@ -21,6 +21,9 @@ to one job: **keep track of what you own and what it is worth.**
 | 4 | **2 currencies**: `VND`, `USD` — one is the *base* for all totals |
 | 5 | **2 languages**: `vi` (Tiếng Việt), `en` (English) |
 | 6 | Net-worth snapshot history + allocation breakdown |
+| 6b | **Sell a position** (part or all): the cost it released is worked out in proportion, and the gain is **kept** as a realised figure after the position is gone |
+| 6c | **One cash balance per currency** (VND and USD), with the history of what moved it. There is no "add an account", no naming to choose between, and no delete |
+| 6d | **Cash-linked trades** (a switch, off by default): buying, selling, opening and maturing a deposit, and deleting a holding move money in or out of the balance in that trade's own currency, each leaving one signed line of history |
 | 7 | Everything local: SQLite file on disk, no account, no cloud |
 
 ### 1.2 Explicitly **out of scope**
@@ -31,6 +34,14 @@ to one job: **keep track of what you own and what it is worth.**
 - ❌ Income, expenses, budgets, cash-flow analysis
 - ❌ Debts, liabilities, mortgages, real assets, insurance, pensions
 - ❌ Accumulation plans (PAC), recurring buys, dividend catch-up engine
+- ❌ A transaction **ledger**: the *buys* behind a position are not recorded,
+  only what it cost in total, so a partial sale releases a proportional share of
+  that cost rather than a lot-identified one. A sale is recorded; a purchase
+  history is not. Cash movements (§2.4c) record what a *balance* did, not a
+  categorised book of account.
+- ❌ Cash-flow **analysis**: movements are never categorised, budgeted, summed
+  by month or reported on. The module that moves money is called
+  `app/movements.py`, and `test_scope.py` refuses one named `cashflow`.
 - ❌ Look-through composition (what a fund holds)
 - ❌ Multi-user, auth, sync, tax reporting, broker import
 - ❌ Currencies other than VND and USD
@@ -69,7 +80,32 @@ FxRate (units of `currency` per 1 BASE)   currency  VND | USD
 Setting (key/value)                 base_currency
   base_currency   VND | USD         total
   language        vi | en           invest_value / cash_value
-                                    rates_json (currencies used + rates)
+  cash_linked     true | false      rates_json (currencies used + rates)
+
+CashMovement (one movement of a balance, and what caused it)
+  id                 PK
+  account_id         FK -> cash_accounts.id, ON DELETE CASCADE
+  subject            asset | gold | deposit     (what caused it)
+  action             buy | sell | open | close | adjust | refund
+  holding_id         the holding's id AT THE TIME; null once it is gone
+  symbol / name      snapshotted, so a deleted position still reads as something
+  amount             SIGNED, in `currency`: negative is money out of the account
+  currency           the account's currency
+  rate               units of `currency` per 1 of the holding's; null when equal
+  occurred_on        YYYY-MM-DD
+  note / created_at
+
+Realized (a position that was SOLD; keeps its own copy)
+  id                 PK
+  symbol / kind / name      snapshotted: no FK, so the row outlives the position
+  quantity                  units sold
+  currency                  the position's cost currency
+  cost_removed     float | null   proportional part of cost_basis released
+  proceeds                  total received
+  proceeds_currency         the market's currency for the symbol
+  sold_on           YYYY-MM-DD
+  note
+  created_at
 ```
 
 ### 2.1 Why cash is its own table
@@ -125,6 +161,164 @@ disposable).
   later never rewrites history, and the chart says which base each point used.
 - Floats, not Decimal: this is a tracker, not a ledger. Amounts are rounded for
   display only.
+
+### 2.4b Why a sale is kept, and what "cost" means when one happens
+
+Selling is the only action in this app that **destroys a figure it cannot
+recompute**: a position's `cost_basis`. Delete a position by mistake and the
+mistake is visible; sell it and the cost is gone, taking the gain with it. A
+tracker that quietly loses the loss on a position you just closed is worse than
+one that never tracked it, because the page would then be telling a story about
+a portfolio that did better than it did. So `Realized` exists, and `DELETE
+/api/assets/{id}` is not how a sale is meant to be recorded.
+
+Two rules make it work:
+
+1. **The cost released is proportional.** A position stores one total
+   (`cost_basis`), not the purchases behind it, so selling a third of the
+   quantity releases a third of the cost. This is average cost, it is a
+   computation rather than a stored fact, and it lives in `app/realized.py`.
+   Recording lots instead would be a ledger — see §1.2.
+2. **A sale is a fact, not a total.** The row keeps the two amounts in the
+   currencies they happened in — `cost_removed` in the position's currency,
+   `proceeds` in the market's — and every base-currency figure is derived on
+   read, exactly as it is for a live position. `Valuation` freezes a total on a
+   day; a sale is converted like the rest of the portfolio, so switching the
+   base re-expresses it instead of leaving dong in a dollar table.
+
+**The invariant that proves it works:** selling at the price the market is
+quoting must leave the portfolio's *total* gain unchanged — the same money,
+moved from unrealised to realised. If it changes, a figure has been invented or
+lost. It is asserted in `backend/tests/test_realized.py` and checked against a
+running server in `scripts/acceptance.sh`.
+
+Two consequences the UI states plainly:
+
+- **Nothing is posted to cash.** Money that arrived is a balance the user
+  counts (§2.1). Inventing a cash row from a sale would put money somewhere they
+  never said it went.
+- **A fully sold position is deleted, not kept at zero.** A zero-quantity row
+  has no value, so it would appear in `unconverted` telling the user that a
+  position they have already sold is "not counted" — a warning about nothing.
+  The record of the sale is the `Realized` row.
+
+**An unconvertible quote does not block a sale.** `VWCE.DE` is quoted in EUR,
+which this app cannot convert, and holding one is allowed (§4) — the price is
+reported and left out of the total. Its sale is recorded the same way: the
+proceeds are kept in EUR, `proceeds_base` is `None`, `reason` is
+`not_convertible`. Refusing would leave the user holding a position they no
+longer own, and this app's rule is to report what it cannot convert, not to
+refuse the fact.
+
+### 2.4c Why cash is one balance per currency
+
+Cash used to be a list of accounts the user named and added to, and the list was
+the problem: it meant choosing which pile a purchase came out of, and every extra
+row was another chance for the money to be in the wrong one. A person does not
+have five piles of money; they have a bank balance in đồng and sometimes one in
+dollars. So there are exactly two rows, `UNIQUE(currency)` says so, and
+`app/cash.py` makes it true:
+
+- **they exist before anything asks**: created at startup and again on any read
+  of `/api/cash`, so a balance is never missing rather than empty;
+- **they cannot be added or removed**: there is no `POST /api/cash` and no
+  `DELETE /api/cash/{id}` at all, which is a stronger refusal than a validator
+  rejecting a currency. `PATCH` edits the balance, the label and the note;
+- **a pot's currency is not editable**: it is the pot's identity, and there are
+  two of them.
+
+**A balance is the sum of the lines under it**, and the page says so. Every
+change writes one:
+
+| how the money moved | the line |
+|---|---|
+| a trade — buying, selling, a deposit, gold | `subject` = that holding, through `app.movements` |
+| money the user put in or took out themselves | `subject: cash`, `action: in` / `out`, via `POST /api/cash/{id}/entry` |
+| the user counted their money and it was a different number | `subject: cash`, `action: adjust`, written by `PATCH /api/cash/{id}` |
+| money that was in the pot before there were lines | one opening `adjust`, written by `reconcile` at startup |
+
+The last row is what makes the claim true for a portfolio that existed before
+this feature did: rather than a silent opening figure, the difference is written
+down once, dated the day the balance was last counted. `reconcile` is
+idempotent — after the first pass the two agree and it writes nothing — and a
+pot that has never held money gets no line at all.
+
+**Money in and out is not income and expense tracking.** It is one signed amount
+and a free-text reason ("Lương tháng 10", "Tiền nhà"): there is no category, no
+month, no total by type, and `test_scope.py` refuses a module named after any of
+them. The direction is a word rather than a sign in the request, because a form
+that asks for "-500000" to mean a withdrawal is a form that will one day record
+one the wrong way round.
+
+**Why two and not one.** One pot would have to be denominated in something, and
+a dollar purchase paid from a dong pot is a conversion the user did at a counter,
+not arithmetic the app should assume. Two pots keep every trade in its own
+currency — which is also why the common case needs no rate at all.
+
+**A database from before this rule is merged, not refused.** `merge_cash_pots`
+runs at startup (`app/database.py`), adds the duplicate balances together, moves
+their movement history onto the surviving account rather than letting it cascade
+away, **writes a copy of the database file beside it first**, and logs what it
+did. The rule this repository set for itself — a migration needs a copy of the
+file first — is kept, and the copy is the answer to "what did it do to my
+records".
+
+### 2.4d Why cash can be linked to trades, and why it is off by default
+
+A portfolio is entered twice over: first the holdings, then the balance. During
+that pass the two are independent facts — the shares were bought years ago, out
+of money that is not the number being typed today — so the link starts **off**,
+and turning it on says "from here, trades move money". Nothing is applied
+retroactively; a holding recorded while it was off has no debit behind it, which
+is exactly what makes deleting it give nothing back (§2.4d).
+
+With it on, one trade writes two facts in one request: the holding changed, and
+money entered or left an account. Four rules keep that honest:
+
+1. **A movement is signed and written in the pot's currency**, and the balance
+   is updated by the same number the row records. The balance and its history
+   cannot tell different stories because they are written from one value.
+2. **The pot is the trade's own currency, and the user never chooses it.** A
+   trade in dollars moves the dollar pot; a trade in đồng moves the dong pot. In
+   the common case that means the amount is the trade's own number to the last
+   decimal, with no rate and no rounding. The user can still state **what
+   actually left the bank** when it differs — a fee, or a rate they were given.
+3. **A currency with no pot falls back to đồng, and says so.** `VWCE.DE` is
+   quoted in EUR, which this app neither holds cash in nor converts: the sale is
+   recorded, the cash side reports `no_rate`, and no figure is invented to reach
+   the dong pot.
+4. **Edits move the difference, not the whole figure**, and go back to the pot
+   that paid: a corrected cost basis is the same money the purchase was. Clearing
+   a cost basis moves nothing — the user has said they no longer know what it
+   cost, not that they were refunded.
+5. **The link never blocks the record.** No pot, or no rate, and the trade is
+   still written; the response says which of the two stopped the cash side. An
+   app that refused to record a purchase because it could not fill in the cash
+   row would lose the more important half of the transaction.
+6. **One movement ignores the switch**: money arriving from a closed deposit.
+   With the link off the balance still has to change, and there is nowhere else
+   for it to go — so it lands in the pot of the deposit's currency with a line
+   saying why, rather than appearing silently.
+
+**A delete gives back what the account paid, not the cost basis** (§2.4e).
+Bought for 10 000 000 and half sold for 7 000 000, a position has 3 000 000 of
+the account's money left in it, while its remaining cost basis is 5 000 000. The
+difference is the gain already realised, and refunding the cost basis would put
+money into the account that never left it.
+
+### 2.4e `net_invested`: the figure a delete refunds
+
+```
+net_invested(holding) = Σ amounts of that holding's movements   (signed)
+refund                = −net_invested      when it is negative
+                      = nothing            otherwise
+```
+
+The sum is negative when the account is still down on the trade — the ordinary
+case — and that is what comes back. It is zero for a holding that was never paid
+for out of cash, and it is **positive** for one whose partial sale already
+returned more than it took; both give nothing back, and the response says
+`nothing_paid` rather than crediting a figure that would be invented.
 
 ---
 
@@ -214,11 +408,35 @@ term deposit  interest = principal × annual_rate/100 × days_held / 365
               value    = principal + interest
               value_in_base = convert(value, deposit currency → base)
 total         = Σ market values + Σ cash values + Σ deposit values
+
+closed position (Realized)
+  cost_removed  = cost_basis × quantity_sold / quantity_held   (the whole
+                  cost_basis when the position is sold in full, so the number
+                  the user typed leaves unchanged; null when there was none)
+  proceeds_base = convert(proceeds, proceeds_currency → base)
+  cost_base     = convert(cost_removed, asset_currency → base)
+  gain          = proceeds_base − cost_base
+  realized_gain = Σ gains over every sale   (null if ANY sale has no cost)
+  total_gain    = gain + realized_gain      (null if either side is unknown)
+  total_gain_%  = total_gain / (cost_base + realized_cost_base) × 100
 ```
 
 - `total` is the sum of conversions, never a sum across mixed units.
 - Any position that could not be converted is excluded from `total` and listed
   in `unconverted[]` so the number is never quietly short.
+- The same rule governs the realised figures: **one sale whose gain cannot be
+  worked out makes `realized_gain` and `total_gain` null rather than too large.**
+  There are two ways that happens, and `reason` on the row says which: a cost
+  that was never recorded, and proceeds in a currency this app cannot convert
+  (a EUR listing, held legally — §4). In both cases the row still shows whatever
+  is known. A sale with no cost basis can never be recomputed later, because the
+  row it would have been read from is gone; so the figure that would count the
+  whole proceeds as profit is not printed.
+- A portfolio with no open position has an unrealised gain of 0 rather than an
+  unknown one: the only reason `gain` is null there is that there is nothing to
+  be wrong about. Without that, selling everything — the exact state this
+  feature creates — would answer the one question the user came to ask with
+  "not available".
 
 ---
 
@@ -314,17 +532,19 @@ allows `localhost:5173` for development.
 | GET | `/api/health` | liveness |
 | GET | `/api/settings` | base currency, language, supported lists |
 | PATCH | `/api/settings` | change base currency / language |
-| POST | `/api/settings/wipe` | delete all records (positions, cash, history) |
+| POST | `/api/settings/wipe` | delete all records (positions, sales, cash, movements, deposits, gold, history) |
 | GET | `/api/assets` | list positions (filters: `kind`, `q`) |
 | POST | `/api/assets` | create |
 | GET | `/api/assets/{id}` | read one |
 | PATCH | `/api/assets/{id}` | update |
-| DELETE | `/api/assets/{id}` | delete |
 | POST | `/api/assets/{id}/price` | refresh this one position's quote |
-| GET | `/api/cash` | list cash accounts |
-| POST | `/api/cash` | create |
-| PATCH | `/api/cash/{id}` | **edit balance** (the manual update) |
-| DELETE | `/api/cash/{id}` | delete |
+| POST | `/api/assets/{id}/sell` | sell part or all of it; keeps the gain it locked in |
+| DELETE | `/api/assets/{id}` | delete, **refunding what the cash account paid** (200 with the movement, not 204) |
+| GET | `/api/realized` | closed positions, newest first |
+| DELETE | `/api/realized/{id}` | forget one recorded sale (the position is not restored) |
+| GET | `/api/cash` | the two balances (VND, USD), creating them if missing |
+| POST | `/api/cash/{id}/entry` | money in or out of a balance, with a reason |
+| PATCH | `/api/cash/{id}` | **edit balance** (the manual update), label or note — records the difference |
 | GET | `/api/deposits` | list term deposits (filter `matured`) |
 | POST | `/api/deposits` | open a term deposit |
 | GET | `/api/deposits/{id}` | read one, valued for today |
@@ -339,7 +559,7 @@ allows `localhost:5173` for development.
 | GET | `/api/gold/{id}` | read one |
 | PATCH | `/api/gold/{id}` | change the weight, the unit or the price basis |
 | DELETE | `/api/gold/{id}` | delete |
-| GET | `/api/portfolio` | valued portfolio + allocations + totals |
+| GET | `/api/portfolio` | valued portfolio + allocations + totals + every cash movement |
 | GET | `/api/portfolio/history` | valuation series |
 | POST | `/api/portfolio/snapshot` | write today's valuation |
 | POST | `/api/prices/refresh` | refresh quotes for all market assets |
@@ -356,11 +576,23 @@ views:
 
 1. **Dashboard** — total net worth in base, split by kind, allocation donut with
    percentages, gains, net-worth line chart, unconverted/stale warnings. The
-   five kinds are always all listed, including the empty ones.
+   five kinds are always all listed, including the empty ones. The two gain
+   tiles are the **unrealised** ones and say so; when anything has been sold, a
+   second row adds the **realised** gain and the **total** across both — the row
+   only appears once there is a realised figure to show.
 2. **Holdings** — table of market assets with live value, cost, gain %, CRUD via
-   a slide-over form; a symbol picker backed by `/api/market/search`.
-3. **Cash** — list of cash accounts, inline balance editing (the manual
-   update), per-currency subtotals.
+   a slide-over form; a symbol picker backed by `/api/market/search`. A row's
+   action menu offers **Sell** (how many units went, how much came back), and
+   under the table is the list of closed positions with what each released and
+   locked in. The sell form shows the market value of the part being sold as a
+   *reference beside the field* and never fills the amount in: a sale recorded
+   at the market's own number would print unrealised gain as realised gain,
+   which is the confusion the form exists to remove.
+3. **Cash** — the balance in đồng and the balance in dollars, with **money in
+   and out** (an amount, a direction, a date and a reason), edited in place when
+   you would rather just type the number, and the **history** of every movement
+   with what caused it, filterable to one balance. There is no "add a balance"
+   and no "delete": there is nothing to add them to.
 4. **Gold** — each holding as a card: the product line it follows, the shop's
    published price, that price per unit of the unit held, the value, and the
    gain. A holding on a line the shop no longer publishes says so instead of
@@ -370,8 +602,8 @@ views:
    maturity. A matured deposit is highlighted and carries the two actions that
    make sense — roll it over, or withdraw it into a cash account.
 6. **Market** — cached quotes and FX rates with their dates, refresh buttons.
-7. **Settings** — base currency, language, data location, and a danger zone that
-   wipes every record behind a confirmation. The wipe keeps the settings and the
+7. **Settings** — base currency, language, **whether trades move cash**, data
+   location, and a danger zone that wipes every record behind a confirmation. The wipe keeps the settings and the
    cached prices and rates: they are not the user's data, and throwing away a
    rate would leave a fresh start unable to convert anything.
 
@@ -439,3 +671,24 @@ and has nowhere to render it.
 9. A matured deposit offers roll-over and withdrawal; withdrawing it leaves the
    portfolio total unchanged, because the money moved rather than appeared.
 10. No goal, chat, agent, or advisor code exists anywhere in the tree.
+11. Selling a position at the price the market is quoting leaves the portfolio's
+    **total gain unchanged** — the same money, moved from unrealised to
+    realised — and the position itself is gone from the holdings table while
+    the sale remains in `GET /api/realized`. Deleting a position must not be the
+    way to record a sale.
+12. With cash-linked trades **on**, buying takes exactly the cost out of the
+    balance in that trade's own currency, selling puts back exactly the
+    proceeds, and the portfolio's **total is unchanged by either**: money moved
+    between two tables, it was not created. A dollar trade moves the dollar
+    balance and leaves the dong one alone. Deleting that position gives back what
+    the balance paid, and deleting one recorded while the link was **off** gives
+    back nothing.
+13. There is exactly one cash balance per currency: `POST /api/cash` and
+    `DELETE /api/cash/{id}` do not exist, and a database that held two balances
+    in one currency before this rule is merged at startup — balances added,
+    history carried across, and a copy of the file written beside it first.
+14. Money can be put into a balance and taken out of it with a reason
+    (`POST /api/cash/{id}/entry`), and **the balance always equals the sum of
+    its history**: a typed-in balance and a counted-and-corrected one leave a
+    line too, and money that predates the history gets one opening line rather
+    than a silent figure.

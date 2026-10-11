@@ -17,10 +17,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, status
 
-from app import gold as gold_prices
+from app import movements, gold as gold_prices
 from app import models, settings_store, valuation
-from app.routers.deps import DbSession, get_or_404, refused
+from app.routers.deps import DbSession, cash_report, get_or_404, refused
 from app.schemas import (
+    DeleteOut,
     GoldCreate,
     GoldOut,
     GoldProductList,
@@ -120,9 +121,26 @@ def create_gold(payload: GoldCreate, db: DbSession) -> GoldOut:
         note=payload.note,
     )
     db.add(row)
+    # Flushed, not committed: the cash row points at this holding's id, and the
+    # two halves of one purchase have to land together or not at all.
+    db.flush()
+
+    outcome = movements.spend(
+        db,
+        subject="gold",
+        action="buy",
+        name=row.name,
+        holding_id=row.id,
+        amount=row.cost_basis,
+        currency=row.currency,
+        cash_amount=payload.cash_amount,
+    )
     db.commit()
     db.refresh(row)
-    return _valued(db, row)
+
+    holding = _valued(db, row)
+    holding.cash = cash_report(db, outcome)
+    return holding
 
 
 @router.get("/{gold_id}", response_model=GoldOut)
@@ -132,8 +150,29 @@ def read_gold(gold_id: int, db: DbSession) -> GoldOut:
 
 @router.patch("/{gold_id}", response_model=GoldOut)
 def update_gold(gold_id: int, payload: GoldUpdate, db: DbSession) -> GoldOut:
+    """Change a holding's weight, unit, product line or cost.
+
+    An edited cost basis moves the difference into or out of cash, by the same
+    rule as a position: the record of what was paid changed, so the money
+    changed with it. Clearing the cost moves nothing — the gold is still
+    owned — and changing the weight alone is a correction, not a purchase.
+    """
     row = get_or_404(db, models.Gold, gold_id, "Gold holding")
     fields = payload.model_dump(exclude_unset=True)
+    cash: movements.Outcome | None = None
+
+    if "cost_basis" in fields:
+        before = float(row.cost_basis or 0.0)
+        after = fields["cost_basis"]
+        if after is not None and float(after) != before:
+            cash = movements.adjust(
+                db,
+                subject="gold",
+                name=(fields.get("name") or row.name),
+                holding_id=row.id,
+                delta=float(after) - before,
+                currency=(fields.get("currency") or row.currency),
+                    )
 
     if "name" in fields and fields["name"]:
         fields["name"] = fields["name"].strip()
@@ -150,11 +189,20 @@ def update_gold(gold_id: int, payload: GoldUpdate, db: DbSession) -> GoldOut:
     row.updated_at = models.utcnow_iso()
     db.commit()
     db.refresh(row)
-    return _valued(db, row)
+
+    updated = _valued(db, row)
+    if cash is not None:
+        updated.cash = cash_report(db, cash)
+    return updated
 
 
-@router.delete("/{gold_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_gold(gold_id: int, db: DbSession) -> None:
+@router.delete("/{gold_id}", response_model=DeleteOut)
+def delete_gold(gold_id: int, db: DbSession) -> DeleteOut:
+    """Remove a holding, giving back what it still had in a cash account."""
     row = get_or_404(db, models.Gold, gold_id, "Gold holding")
+    outcome = movements.refund(
+        db, subject="gold", holding_id=row.id, name=row.name
+    )
     db.delete(row)
     db.commit()
+    return DeleteOut(removed_id=gold_id, cash=cash_report(db, outcome))

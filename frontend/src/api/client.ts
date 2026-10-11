@@ -13,15 +13,19 @@ import type {
   Asset,
   AssetInput,
   AssetPatch,
+  AssetSale,
   CashAccount,
-  CashInput,
+  CashEntry,
+  CashEntryResult,
   CashPatch,
+  DeleteResult,
   Deposit,
   DepositInput,
   DepositPatch,
   DepositRoll,
   DepositWithdraw,
   DepositWithdrawn,
+  FxRefresh,
   GoldHolding,
   GoldInput,
   GoldPatch,
@@ -30,7 +34,7 @@ import type {
   Market,
   Portfolio,
   PriceRefresh,
-  FxRefresh,
+  Realized,
   RefreshAll,
   SearchResult,
   Settings,
@@ -104,6 +108,8 @@ export const getSettings = () => request<Settings>("/settings");
 export const updateSettings = (patch: {
   base_currency?: string;
   language?: string;
+  /** Turning this on makes every later trade move money. */
+  cash_linked?: boolean;
 }) => request<Settings>("/settings", { method: "PATCH", json: patch });
 
 /**
@@ -130,26 +136,47 @@ export const createAsset = (input: AssetInput) =>
 export const updateAsset = (id: number, patch: AssetPatch) =>
   request<Asset>(`/assets/${id}`, { method: "PATCH", json: patch });
 
+/** Deleting a position may also give money back, so it answers with what it
+ * did rather than with an empty body. */
 export const deleteAsset = (id: number) =>
-  request<void>(`/assets/${id}`, { method: "DELETE" });
+  request<DeleteResult>(`/assets/${id}`, { method: "DELETE" });
 
 export const priceAsset = (id: number) =>
   request<Asset>(`/assets/${id}/price`, { method: "POST" });
 
+/**
+ * Sell part or all of a position.
+ *
+ * The gain is computed by the server from the position's cost basis and this
+ * one amount — never from the current price, which is what the position would
+ * be worth if it had not been sold.
+ */
+export const sellAsset = (id: number, body: AssetSale) =>
+  request<Realized>(`/assets/${id}/sell`, { method: "POST", json: body });
+
 // ---------------------------------------------------------------------------
-// Cash
+// Sold positions
+// ---------------------------------------------------------------------------
+
+export const listRealized = () => request<Realized[]>("/realized");
+
+/** Forget one recorded sale. The position it closed is not restored. */
+export const deleteRealized = (id: number) =>
+  request<void>(`/realized/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Cash: one pot per currency
 // ---------------------------------------------------------------------------
 
 export const listCash = () => request<CashAccount[]>("/cash");
 
-export const createCash = (input: CashInput) =>
-  request<CashAccount>("/cash", { method: "POST", json: input });
-
+/** Edit a pot: its balance (the manual update), its label, its note. */
 export const updateCash = (id: number, patch: CashPatch) =>
   request<CashAccount>(`/cash/${id}`, { method: "PATCH", json: patch });
 
-export const deleteCash = (id: number) =>
-  request<void>(`/cash/${id}`, { method: "DELETE" });
+/** Record money going into a balance, or coming out of it. */
+export const cashEntry = (id: number, body: CashEntry) =>
+  request<CashEntryResult>(`/cash/${id}/entry`, { method: "POST", json: body });
 
 // ---------------------------------------------------------------------------
 // Term deposits (savings)
@@ -167,7 +194,7 @@ export const updateDeposit = (id: number, patch: DepositPatch) =>
   request<Deposit>(`/deposits/${id}`, { method: "PATCH", json: patch });
 
 export const deleteDeposit = (id: number) =>
-  request<void>(`/deposits/${id}`, { method: "DELETE" });
+  request<DeleteResult>(`/deposits/${id}`, { method: "DELETE" });
 
 /** The value from today to maturity, computed by the same arithmetic. */
 export const depositSchedule = (id: number) =>
@@ -203,7 +230,7 @@ export const updateGold = (id: number, patch: GoldPatch) =>
   request<GoldHolding>(`/gold/${id}`, { method: "PATCH", json: patch });
 
 export const deleteGold = (id: number) =>
-  request<void>(`/gold/${id}`, { method: "DELETE" });
+  request<DeleteResult>(`/gold/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
 // The portfolio

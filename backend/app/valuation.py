@@ -27,7 +27,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deposits, fx, gold as gold_prices, models, settings_store
+from app import movements, deposits, fx, gold as gold_prices, models, settings_store
 from app.money import (
     MARKET_KINDS,
     AssetKind,
@@ -73,6 +73,42 @@ class ValuedAsset:
     def counted(self) -> bool:
         """True if this position is inside the portfolio total."""
         return self.value_base is not None
+
+
+@dataclass
+class ValuedSale:
+    """One closed position: what it sold for against what it cost.
+
+    Both sides are derived on read from the two amounts `models.Realized`
+    stores, each in its own currency, for the same reason a live position is
+    valued rather than read out of a column: a sale is not a total frozen on a
+    day, it is a fact that is converted like everything else in the portfolio.
+    Switching the base currency therefore re-expresses it instead of leaving a
+    dong figure sitting in a dollar table.
+    """
+
+    id: int
+    symbol: str
+    name: str
+    kind: str
+    quantity: float
+    currency: str
+    sold_on: str
+    note: str | None
+
+    #: What was received, in the market's currency, and how much it released
+    #: from the position's cost basis in the position's currency.
+    proceeds: float
+    proceeds_currency: str
+    cost_removed: float | None
+
+    proceeds_base: float | None
+    cost_base: float | None
+    gain: float | None
+    gain_pct: float | None
+
+    #: None when both figures are known; otherwise why one is not.
+    reason: str | None = None
 
 
 @dataclass
@@ -145,6 +181,26 @@ class Portfolio:
     cash: list[ValuedCash] = field(default_factory=list)
     deposits: list[dict] = field(default_factory=list)
     gold: list[ValuedGold] = field(default_factory=list)
+
+    #: Every closed position, newest first. Kept beside the live ones because
+    #: the two figures below are meaningless without the rows they came from.
+    realized: list[ValuedSale] = field(default_factory=list)
+    #: Gain already locked in by sales. None when any sale is missing a cost —
+    #: a total that is too large is worse than one that says it does not know.
+    realized_gain: float | None = None
+    realized_cost_base: float | None = None
+    realized_count: int = 0
+    #: Unrealised + realised, and the return on every đồng ever committed to a
+    #: market position (what is still held plus what has been sold).
+    total_gain: float | None = None
+    total_gain_pct: float | None = None
+
+    #: Every movement of every cash account, newest first. Part of the portfolio
+    #: rather than a page of its own, because a balance and its history are the
+    #: same fact told twice and a client that had to ask for the second would
+    #: eventually draw the first without it.
+    movements: list[dict] = field(default_factory=list)
+
     by_kind: list[dict] = field(default_factory=list)
     by_currency: list[dict] = field(default_factory=list)
     unconverted: list[dict] = field(default_factory=list)
@@ -165,6 +221,13 @@ class Portfolio:
             "cash": [asdict(account) for account in self.cash],
             "deposits": self.deposits,
             "gold": [asdict(holding) for holding in self.gold],
+            "realized": [asdict(sale) for sale in self.realized],
+            "realized_gain": self.realized_gain,
+            "realized_cost_base": self.realized_cost_base,
+            "realized_count": self.realized_count,
+            "total_gain": self.total_gain,
+            "total_gain_pct": self.total_gain_pct,
+            "movements": self.movements,
             "by_kind": self.by_kind,
             "by_currency": self.by_currency,
             "unconverted": self.unconverted,
@@ -250,6 +313,52 @@ def value_asset(
         cost_basis=asset.cost_basis,
         value=value,
         value_base=value_base,
+        cost_base=cost_base,
+        gain=gain,
+        gain_pct=gain_pct,
+        reason=reason,
+    )
+
+
+def value_sale(row: models.Realized, converter: fx.Converter) -> ValuedSale:
+    """Price one closed position: what it sold for against what it released.
+
+    The two amounts were recorded in different currencies for a reason — what
+    you received is the market's business, what you paid is your account's — so
+    each is converted from its own, and neither is ever converted twice.
+    """
+    proceeds_base = converter.to_base(row.proceeds, row.proceeds_currency)
+
+    if row.cost_removed is None:
+        cost_base: float | None = None
+        reason = REASON_NO_COST
+    else:
+        cost_base = converter.to_base(row.cost_removed, row.currency)
+        reason = None if cost_base is not None else REASON_NOT_CONVERTIBLE
+
+    if proceeds_base is None and reason is None:
+        reason = REASON_NOT_CONVERTIBLE
+
+    gain: float | None = None
+    gain_pct: float | None = None
+    if proceeds_base is not None and cost_base is not None:
+        gain = proceeds_base - cost_base
+        if cost_base:
+            gain_pct = gain / cost_base * 100.0
+
+    return ValuedSale(
+        id=row.id,
+        symbol=row.symbol,
+        name=row.name,
+        kind=row.kind,
+        quantity=float(row.quantity),
+        currency=row.currency,
+        sold_on=row.sold_on,
+        note=row.note,
+        proceeds=float(row.proceeds),
+        proceeds_currency=row.proceeds_currency,
+        cost_removed=row.cost_removed,
+        proceeds_base=proceeds_base,
         cost_base=cost_base,
         gain=gain,
         gain_pct=gain_pct,
@@ -419,8 +528,26 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
         for row in session.execute(select(models.Gold).order_by(models.Gold.id)).scalars()
     ]
 
+    # Newest first, and by id within a day: two sales on one day are still two
+    # sales, and the one entered last is the one the user just made.
+    sales = [
+        value_sale(row, converter)
+        for row in session.execute(
+            select(models.Realized).order_by(
+                models.Realized.sold_on.desc(), models.Realized.id.desc()
+            )
+        ).scalars()
+    ]
+
     result = Portfolio(
-        base_currency=base, assets=assets, cash=cash, deposits=terms, gold=gold
+        base_currency=base,
+        assets=assets,
+        cash=cash,
+        deposits=terms,
+        gold=gold,
+        realized=sales,
+        realized_count=len(sales),
+        movements=movements.for_portfolio(session),
     )
 
     cost_of_what_is_counted = 0.0
@@ -506,10 +633,59 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
         result.gain = None
         result.gain_pct = None
 
+    _realized_totals(result, sales)
+
     result.by_kind = _by_kind(assets, cash, terms, gold)
     result.by_currency = _by_currency(assets, cash, terms, gold)
     result.rates = converter.report()
     return result
+
+
+def _realized_totals(result: Portfolio, sales: list[ValuedSale]) -> None:
+    """Add the realised figures to `result`, and the total across both sides.
+
+    The rule for the realised total is the rule already used for the unrealised
+    one, applied to sales instead of positions: **one sale with no recorded cost
+    and the total is None, not too large.** A sale whose cost basis nobody wrote
+    down has a permanently unknown gain — it can never be recomputed later the
+    way a live position's can, because the row it would have been read from is
+    gone. So the figure that would quietly report it as pure profit is not
+    printed, and the rows below it (each of which says what it does know) are
+    what the user reads instead.
+
+    The unrealised side treats "no positions at all" as no gain rather than an
+    unknown one. That distinction only starts to matter here: a fully sold
+    portfolio is exactly the state this feature creates, and answering it with
+    "not available" would hide the one number the user came to see.
+    """
+    if sales:
+        proceeds = 0.0
+        cost = 0.0
+        for sale in sales:
+            if sale.proceeds_base is None or sale.cost_base is None:
+                # One incomplete sale and the total says nothing. The per-sale
+                # rows still carry every figure that IS known.
+                return
+            proceeds += sale.proceeds_base
+            cost += sale.cost_base
+        result.realized_cost_base = cost
+        result.realized_gain = proceeds - cost
+    else:
+        # Nothing sold is a fact — zero realised — unlike a missing cost basis,
+        # which is a gap. Keeping the two apart is what stops "no sales yet"
+        # from reading as "we do not know".
+        result.realized_cost_base = 0.0
+        result.realized_gain = 0.0
+
+    unrealised = result.gain if result.assets else 0.0
+    realized = result.realized_gain
+    if unrealised is None or realized is None:
+        return
+
+    result.total_gain = unrealised + realized
+    committed = (result.cost_base or 0.0) + (result.realized_cost_base or 0.0)
+    if committed:
+        result.total_gain_pct = result.total_gain / committed * 100.0
 
 
 def _by_kind(

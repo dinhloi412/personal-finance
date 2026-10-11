@@ -132,3 +132,28 @@ class TestTheDemoPortfolio:
         from app import models
 
         assert db.get(models.PriceCache, "DCDE") is not None
+
+    def test_it_includes_a_position_sold_in_part(self, db):
+        """The realised figures only appear on the pages once something has been
+        sold, so a demo without a sale is a demo of a smaller app — and the
+        partial sale is what shows a closed trade next to the live one it came
+        out of."""
+        seed.seed()
+        from app import models, valuation
+
+        symbol, units, proceeds = seed.DEMO_SALE
+        sale = db.query(models.Realized).one()
+        assert sale.symbol == symbol
+        assert sale.quantity == units
+        assert sale.proceeds == proceeds
+
+        picture = valuation.portfolio(db)
+        assert picture.realized_count == 1
+        assert picture.realized_gain is not None, "the demo sale must have a cost"
+
+        # The position it came out of is still there, reduced by what was sold,
+        # and its cost basis is reduced by the same proportion.
+        held = next(row for row in picture.assets if row.symbol == symbol)
+        full = next(row for row in seed.DEMO_ASSETS if row[0] == symbol)
+        assert held.quantity == full[3] - units
+        assert held.cost_basis == pytest.approx(full[4] * (1 - units / full[3]))

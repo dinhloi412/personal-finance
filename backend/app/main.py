@@ -25,7 +25,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import __version__, fx
 from app.database import SessionLocal, init_db
 from app.money import BASE_CURRENCIES
-from app.routers import assets, cash, deposits, gold, market, portfolio, settings
+from app.routers import (
+    assets,
+    cash,
+    deposits,
+    gold,
+    market,
+    portfolio,
+    realized,
+    settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +67,30 @@ def _ensure_rates() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # `init_db` also merges any duplicate cash accounts into the one pot per
+    # currency this app now keeps — see `app.database.merge_cash_pots`.
     init_db()
     _ensure_rates()
+    _ensure_cash_pots()
     yield
+
+
+def _ensure_cash_pots() -> None:
+    """Make sure both cash pots exist before anything asks for a balance.
+
+    The same shape as `_ensure_rates`, and for the same reason: a fresh database
+    must be usable the second it opens, and "there is one pot per currency" is a
+    fact about the file rather than about someone having visited the Cash page.
+    """
+    # Imported here, not at the top: `from app.routers import cash` above binds
+    # that name to the *router*, and one of the two has to give.
+    from app import cash
+
+    session = SessionLocal()
+    try:
+        cash.ensure_pots(session)
+    finally:
+        session.close()
 
 
 def create_app() -> FastAPI:
@@ -84,6 +114,7 @@ def create_app() -> FastAPI:
 
     app.include_router(settings.router)
     app.include_router(assets.router)
+    app.include_router(realized.router)
     app.include_router(cash.router)
     app.include_router(deposits.router)
     app.include_router(gold.router)

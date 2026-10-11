@@ -64,12 +64,19 @@ if [ "$aapl_price" = "None" ]; then fail "AAPL has a price"; else pass "AAPL pri
 
 echo
 echo "3. cash in both currencies (criterion 3)"
-curl -fsS -X POST "$base/api/cash" -H 'Content-Type: application/json' \
-  -d '{"name":"Vietcombank","currency":"VND","balance":85000000}' >/dev/null
-curl -fsS -X POST "$base/api/cash" -H 'Content-Type: application/json' \
-  -d '{"name":"Wise","currency":"USD","balance":2400}' >/dev/null
+# One pot per currency, there without being created: filling a balance is the
+# whole of "adding cash" now.
+fill_pot() {
+  # fill_pot <currency> <balance>
+  local id
+  id="$(curl -fsS "$base/api/cash" | python3 -c "import sys,json;print(next(r['id'] for r in json.load(sys.stdin) if r['currency']=='$1'))")"
+  curl -fsS -X PATCH "$base/api/cash/$id" -H 'Content-Type: application/json' \
+    -d "{\"balance\":$2}" >/dev/null
+}
+fill_pot VND 85000000
+fill_pot USD 2400
 cash_count="$(curl -fsS "$base/api/portfolio" | jq_get "['counts']['cash']")"
-check "both cash accounts are counted" "$cash_count" "2"
+check "a pot per currency is counted" "$cash_count" "2"
 
 echo
 echo "4. the total is a sum of conversions (criterion 2 and 3)"
@@ -97,7 +104,9 @@ echo
 echo "6. a currency the app cannot hold is refused (criterion 7)"
 status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/api/cash" \
   -H 'Content-Type: application/json' -d '{"name":"Revolut","currency":"EUR","balance":100}')"
-check "a third currency is a 422" "$status" "422"
+# 405, not 422: there is no route that adds a pot at all, which is a stronger
+# refusal than a validator rejecting its currency.
+check "a cash balance cannot be created in a third currency" "$status" "405"
 
 echo
 echo "7. switching the display currency re-expresses every total (criterion 5)"
@@ -160,7 +169,121 @@ remaining="$(curl -fsS "$base/api/deposits" | python3 -c 'import sys,json;print(
 check "the closed deposit is gone" "$remaining" "0"
 
 echo
-echo "11. language (criterion 6)"
+echo "11. selling a position moves the gain, it does not erase it (criterion 11)"
+# A position is created at a cost, then sold at the price the market is quoting
+# for it. The portfolio's total gain must come out of that EXACTLY unchanged:
+# the same money, moved from the unrealised column to the realised one. Erasing
+# it is the one failure this feature exists to prevent, and it is the failure a
+# deleted row would have produced silently.
+sold="$(curl -fsS -X POST "$base/api/assets" -H 'Content-Type: application/json' \
+  -d '{"symbol":"AAPL","kind":"stock","name":"Apple Inc.","quantity":10,"cost_basis":1500,"currency":"USD"}')"
+sold_id="$(printf '%s' "$sold" | jq_get "['id']")"
+sold_price="$(printf '%s' "$sold" | jq_get "['price']")"
+positions_before="$(curl -fsS "$base/api/assets" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+gain_before="$(curl -fsS "$base/api/portfolio" | jq_get "['total_gain']")"
+proceeds="$(python3 -c "print(10 * $sold_price)")"
+curl -fsS -X POST "$base/api/assets/$sold_id/sell" -H 'Content-Type: application/json' \
+  -d "{\"quantity\":10,\"proceeds\":$proceeds}" >/dev/null
+gain_after="$(curl -fsS "$base/api/portfolio" | jq_get "['total_gain']")"
+if python3 "$(dirname "$0")/compare_money.py" "$gain_before" "$gain_after"; then
+  failures=$((failures + 0))
+else
+  failures=$((failures + 1))
+fi
+count="$(curl -fsS "$base/api/portfolio" | jq_get "['realized_count']")"
+check "the sale is in the realised list" "$count" "1"
+positions_after="$(curl -fsS "$base/api/assets" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+check "the position it closed is gone" "$positions_after" "$((positions_before - 1))"
+
+echo
+echo "12. cash-linked trades move money, they do not make it (criterion 12)"
+curl -fsS -X PATCH "$base/api/settings" -H 'Content-Type: application/json' \
+  -d '{"cash_linked":true}' >/dev/null
+check "the link is on" "$(curl -fsS "$base/api/settings" | jq_get "['cash_linked']")" "True"
+
+# Cash is one pot per currency, and it is there without being created.
+pots="$(curl -fsS "$base/api/cash" | jq_get "[r['currency'] for r in d]")"
+check "there is one pot per currency, dong first" "$pots" "['VND', 'USD']"
+status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/api/cash" \
+  -H 'Content-Type: application/json' -d '{"name":"X","currency":"VND","balance":1}')"
+check "a second dong pot cannot be added" "$status" "405"
+
+wallet="$(curl -fsS "$base/api/cash" | python3 -c "import sys,json;print(next(r['id'] for r in json.load(sys.stdin) if r['currency']=='VND'))")"
+wallet_balance() {
+  curl -fsS "$base/api/cash" | python3 -c "import sys,json;print(next(r['balance'] for r in json.load(sys.stdin) if r['currency']=='VND'))"
+}
+curl -fsS -X PATCH "$base/api/cash/$wallet" -H 'Content-Type: application/json' \
+  -d '{"balance":100000000}' >/dev/null
+
+# A round trip at the SAME price, so the check does not depend on what the
+# market happens to say today: 22,550,000 leaves the pot, the same comes back,
+# and the balance is where it started. Anything else is the link's arithmetic
+# rather than the market's.
+bought="$(curl -fsS -X POST "$base/api/assets" -H 'Content-Type: application/json' \
+  -d '{"symbol":"VIC.VN","kind":"stock","name":"Vingroup","quantity":100,"cost_basis":22550000,"currency":"VND"}')"
+check "the purchase says it moved money" "$(printf '%s' "$bought" | jq_get "['cash']['moved']")" "True"
+check "and exactly what it cost, in dong" "$(printf '%s' "$bought" | jq_get "['cash']['amount']")" "-22550000.0"
+check "leaving 77,450,000 in the pot" "$(wallet_balance)" "77450000.0"
+check "the movement is on the record" \
+  "$(curl -fsS "$base/api/portfolio" | jq_get "['movements'][0]['action']")" "buy"
+
+position_id="$(printf '%s' "$bought" | jq_get "['id']")"
+curl -fsS -X POST "$base/api/assets/$position_id/sell" -H 'Content-Type: application/json' \
+  -d '{"quantity":100,"proceeds":22550000}' >/dev/null
+check "selling it back leaves the pot whole" "$(wallet_balance)" "100000000.0"
+
+check "the position is gone from the holdings" \
+  "$(curl -fsS "$base/api/assets" | jq_get "[a['symbol'] for a in d if a['id']==$position_id]")" "[]"
+
+# A dollar trade moves the dollar pot, in dollars, with no rate involved — and
+# leaves the dong pot alone. The delta is what is checked, not the balance:
+# other steps have put money in that pot too.
+usd_before="$(curl -fsS "$base/api/cash" | python3 -c "import sys,json;print(next(r['balance'] for r in json.load(sys.stdin) if r['currency']=='USD'))")"
+usd_trade="$(curl -fsS -X POST "$base/api/assets" -H 'Content-Type: application/json' \
+  -d '{"symbol":"AAPL","kind":"stock","name":"Apple Inc.","quantity":1,"cost_basis":200,"currency":"USD"}')"
+check "a dollar purchase moves the dollar pot" \
+  "$(printf '%s' "$usd_trade" | jq_get "['cash']['currency']")" "USD"
+check "and the dollar pot is 200 lighter" \
+  "$(curl -fsS "$base/api/cash" | python3 -c "import sys,json;print(next(r['balance'] for r in json.load(sys.stdin) if r['currency']=='USD'))")" \
+  "$(python3 -c "print($usd_before - 200)")"
+check "the dong pot was not touched by it" "$(wallet_balance)" "100000000.0"
+
+echo
+echo "13. money in and out, and a balance that equals its history (criterion 14)"
+# The Cash page's own action: money the user says arrived or left, with a reason.
+before="$(wallet_balance)"
+entry="$(curl -fsS -X POST "$base/api/cash/$wallet/entry" -H 'Content-Type: application/json' \
+  -d '{"amount":5000000,"direction":"in","note":"Lương tháng 10"}')"
+check "money in lands in the balance" \
+  "$(printf '%s' "$entry" | jq_get "['cash']['amount']")" "5000000.0"
+check "and the balance grew by it" "$(wallet_balance)" "$(python3 -c "print($before + 5000000)")"
+
+curl -fsS -X POST "$base/api/cash/$wallet/entry" -H 'Content-Type: application/json' \
+  -d '{"amount":1200000,"direction":"out","note":"Tiền nhà"}' >/dev/null
+check "money out is signed negative" \
+  "$(curl -fsS "$base/api/portfolio" | jq_get "['movements'][0]['amount']")" "-1200000.0"
+
+# Counting the balance and finding a different number is a real event, and it
+# leaves a line too: the page prints one figure and claims it is the sum of the
+# lines under it.
+curl -fsS -X PATCH "$base/api/cash/$wallet" -H 'Content-Type: application/json' \
+  -d '{"balance":25000000}' >/dev/null
+check "a counted balance writes the difference" \
+  "$(curl -fsS "$base/api/portfolio" | jq_get "['movements'][0]['action']")" "adjust"
+
+history="$(curl -fsS "$base/api/portfolio" | python3 -c "
+import sys, json
+rows = [m for m in json.load(sys.stdin)['movements'] if m['currency'] == 'VND']
+print(round(sum(m['amount'] for m in rows), 2))
+")"
+check "and the balance is the sum of its history" "$history" "$(wallet_balance)"
+
+status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/api/cash/$wallet/entry" \
+  -H 'Content-Type: application/json' -d '{"amount":-1,"direction":"in"}')"
+check "a negative amount is refused" "$status" "422"
+
+echo
+echo "14. language (criterion 6)"
 curl -fsS -X PATCH "$base/api/settings" -H 'Content-Type: application/json' \
   -d '{"language":"en"}' >/dev/null
 language="$(curl -fsS "$base/api/settings" | jq_get "['language']")"

@@ -23,6 +23,7 @@ def _current(db) -> SettingsOut:
     return SettingsOut(
         base_currency=settings_store.base_currency(db),
         language=settings_store.language(db),
+        cash_linked=settings_store.cash_linked(db),
         supported_currencies=list(CURRENCIES),
         supported_kinds=[*MARKET_KINDS, "cash"],
         supported_languages=list(LANGUAGES),
@@ -61,25 +62,49 @@ def update_settings(payload: SettingsPatch, db: DbSession) -> SettingsOut:
         except settings_store.SettingRefused as cause:
             raise refused(str(cause)) from cause
 
+    if payload.cash_linked is not None:
+        try:
+            settings_store.set_cash_linked(db, payload.cash_linked)
+        except settings_store.SettingRefused as cause:
+            raise refused(str(cause)) from cause
+
     return _current(db)
 
 
 @router.post("/wipe", response_model=WipeOut)
 def wipe(db: DbSession) -> WipeOut:
-    """Delete every position, cash balance and recorded point.
+    """Delete every record the user has entered.
 
     The settings and the cached prices and rates are kept: they are not the
     user's data, they are what makes the app work, and throwing away a rate
     would leave a fresh start with nothing to convert with.
 
+    Every table of records is listed here, not only the ones a portfolio is
+    mostly made of. A "delete all data" that left the savings accounts, the gold
+    and the sales behind would be the worst kind of wipe: the user believes the
+    machine is clean, and four of the six things they typed are still on it.
+
     This exists because a local-first app has no "delete my account" — the
     alternative is the user editing a SQLite file by hand, which is exactly the
     kind of instruction that ends with a lost database.
     """
+    # Movements before accounts: deleting an account takes its history with it at
+    # the database level, so counting the movements afterwards would always be zero
+    # — a wipe report that says it removed nothing is worse than no report.
     removed = {
         "assets": db.query(models.Asset).delete(),
+        "realized": db.query(models.Realized).delete(),
+        "movements": db.query(models.CashMovement).delete(),
         "cash": db.query(models.CashAccount).delete(),
+        "deposits": db.query(models.Deposit).delete(),
+        "gold": db.query(models.Gold).delete(),
         "valuations": db.query(models.Valuation).delete(),
     }
     db.commit()
+    # Cash is one pot per currency and always exists, so a wipe empties them
+    # rather than leaving a portfolio with no cash at all: what was deleted were
+    # the balances, not the fact that there is a balance.
+    from app import cash
+
+    cash.ensure_pots(db)
     return WipeOut(removed=removed)

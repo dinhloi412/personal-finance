@@ -41,7 +41,7 @@ class TestSettings:
         assert client.patch("/api/settings", json={"base_currency": "EUR"}).status_code == 422
 
     def test_changing_the_base_re_expresses_every_total(self, client):
-        client.post("/api/cash", json={"name": "Vietcombank", "currency": "VND", "balance": 26_000_000})
+        set_cash(client, "VND", 26_000_000, "Vietcombank")
         assert client.get("/api/portfolio").json()["total"] == pytest.approx(26_000_000)
         client.patch("/api/settings", json={"base_currency": "USD"})
         assert client.get("/api/portfolio").json()["total"] == pytest.approx(1_000)
@@ -103,7 +103,12 @@ class TestAssets:
             "/api/assets",
             json={"symbol": "AAPL", "kind": "stock", "quantity": 1, "currency": "USD"},
         ).json()
-        assert client.delete(f"/api/assets/{created['id']}").status_code == 204
+        # 200 with a body, not 204: deleting is two acts now — the row goes, and
+        # with the cash link on the money comes back. The body says which.
+        removed = client.delete(f"/api/assets/{created['id']}")
+        assert removed.status_code == 200
+        assert removed.json()["removed_id"] == created["id"]
+        assert removed.json()["cash"]["moved"] is False
         assert client.get("/api/assets").json() == []
 
     def test_reading_a_position_that_is_not_there_is_a_404(self, client):
@@ -126,67 +131,119 @@ class TestAssets:
         assert [row["symbol"] for row in only_crypto] == ["BTC-USD"]
 
 
+def set_cash(client, currency: str, balance: float, name: str | None = None) -> dict:
+    """Fill one of the two pots, which is all "adding cash" means now."""
+    rows = client.get("/api/cash").json()
+    pot = next(row for row in rows if row["currency"] == currency)
+    body: dict = {"balance": balance}
+    if name is not None:
+        body["name"] = name
+    return client.patch(f"/api/cash/{pot['id']}", json=body).json()
+
+
 class TestCash:
+    """The two pots, and the manual update that is still the whole feature."""
+
+    def vnd(self, client) -> dict:
+        rows = client.get("/api/cash").json()
+        return next(row for row in rows if row["currency"] == "VND")
+
+    def usd(self, client) -> dict:
+        rows = client.get("/api/cash").json()
+        return next(row for row in rows if row["currency"] == "USD")
+
+    def test_the_two_pots_exist_before_anything_is_written(self, client):
+        """Cash is one balance per currency and it is always there: a page that
+        showed no cash at all would be missing the one thing it is for."""
+        rows = client.get("/api/cash").json()
+        assert [row["currency"] for row in rows] == ["VND", "USD"]
+        assert all(row["balance"] == 0 for row in rows)
+
+    def test_dong_comes_first(self, client):
+        """A fixed order, so the pair does not rearrange itself when one is
+        renamed."""
+        client.patch(f"/api/cash/{self.usd(client)['id']}", json={"name": "AAA"})
+        assert [row["currency"] for row in client.get("/api/cash").json()] == [
+            "VND",
+            "USD",
+        ]
+
     def test_a_balance_can_be_written_down(self, client):
-        body = client.post(
-            "/api/cash", json={"name": "Vietcombank", "currency": "VND", "balance": 50_000_000}
+        body = client.patch(
+            f"/api/cash/{self.vnd(client)['id']}",
+            json={"balance": 50_000_000, "name": "Vietcombank"},
         ).json()
         assert body["balance"] == 50_000_000
         assert body["value_base"] == pytest.approx(50_000_000)
         assert body["balance_at"]
 
     def test_the_manual_update_is_one_patch(self, client):
-        created = client.post(
-            "/api/cash", json={"name": "Vietcombank", "currency": "VND", "balance": 1}
+        pot = self.vnd(client)
+        updated = client.patch(
+            f"/api/cash/{pot['id']}", json={"balance": 75_000_000}
         ).json()
-        updated = client.patch(f"/api/cash/{created['id']}", json={"balance": 75_000_000}).json()
         assert updated["balance"] == 75_000_000
         assert updated["value_base"] == pytest.approx(75_000_000)
 
     def test_renaming_does_not_restamp_the_balance(self, client, db):
-        created = client.post(
-            "/api/cash", json={"name": "Old", "currency": "VND", "balance": 1}
-        ).json()
-        # Pretend the balance was written down a week ago.
         from app import models
 
-        row = db.get(models.CashAccount, created["id"])
+        pot = self.vnd(client)
+        row = db.get(models.CashAccount, pot["id"])
         row.balance_at = "2026-01-01"
         db.commit()
 
-        renamed = client.patch(f"/api/cash/{created['id']}", json={"name": "New"}).json()
+        renamed = client.patch(f"/api/cash/{pot['id']}", json={"name": "New"}).json()
         assert renamed["name"] == "New"
         assert renamed["balance_at"] == "2026-01-01"
 
     def test_changing_the_balance_does_restamp_it(self, client, db):
         from app import models
 
-        created = client.post(
-            "/api/cash", json={"name": "Old", "currency": "VND", "balance": 1}
-        ).json()
-        row = db.get(models.CashAccount, created["id"])
+        pot = self.vnd(client)
+        row = db.get(models.CashAccount, pot["id"])
         row.balance_at = "2026-01-01"
         db.commit()
 
-        updated = client.patch(f"/api/cash/{created['id']}", json={"balance": 2}).json()
+        updated = client.patch(f"/api/cash/{pot['id']}", json={"balance": 2}).json()
         assert updated["balance_at"] != "2026-01-01"
 
     def test_cash_in_dollars_is_converted(self, client):
-        body = client.post(
-            "/api/cash", json={"name": "Wise", "currency": "USD", "balance": 100}
+        body = client.patch(
+            f"/api/cash/{self.usd(client)['id']}", json={"balance": 100}
         ).json()
         assert body["value_base"] == pytest.approx(2_600_000)
 
-    def test_a_third_currency_is_refused(self, client):
+    def test_there_is_no_way_to_add_a_second_pot(self, client):
+        """Not a missing feature: one pot per currency is what cash is, so there
+        is nothing to add it to. The route is gone, not hidden."""
         response = client.post(
-            "/api/cash", json={"name": "Revolut", "currency": "EUR", "balance": 100}
+            "/api/cash", json={"name": "Vietcombank", "currency": "VND", "balance": 1}
         )
-        assert response.status_code == 422
+        assert response.status_code in (404, 405)
 
-    def test_a_balance_can_be_deleted(self, client):
-        created = client.post("/api/cash", json={"name": "X", "currency": "VND", "balance": 1}).json()
-        assert client.delete(f"/api/cash/{created['id']}").status_code == 204
-        assert client.get("/api/cash").json() == []
+    def test_there_is_no_way_to_delete_a_pot(self, client):
+        pot = self.vnd(client)
+        assert client.delete(f"/api/cash/{pot['id']}").status_code in (404, 405)
+        assert len(client.get("/api/cash").json()) == 2
+
+    def test_a_pots_currency_cannot_be_changed(self, client):
+        """It is the pot's identity. Changing it would be a different pot, and
+        the app only has two."""
+        pot = self.vnd(client)
+        updated = client.patch(f"/api/cash/{pot['id']}", json={"currency": "USD"}).json()
+        assert updated["currency"] == "VND"
+
+    def test_the_database_refuses_a_second_pot_of_one_currency(self, db):
+        from sqlalchemy.exc import IntegrityError
+
+        from app import cash, models
+
+        cash.ensure_pots(db)
+        db.add(models.CashAccount(name="Extra", currency="VND", balance=1))
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
 
 
 class TestPortfolio:
@@ -194,11 +251,14 @@ class TestPortfolio:
         body = client.get("/api/portfolio").json()
         assert body["total"] == 0.0
         assert body["assets"] == []
-        assert body["cash"] == []
+        # The two pots are there and empty: cash always exists, and "0 ₫ in
+        # đồng" is a fact rather than a missing row.
+        assert [row["balance"] for row in body["cash"]] == [0.0, 0.0]
+        assert body["cash_value"] == 0.0
         assert body["counts"]["assets"] == 0
 
     def test_the_portfolio_carries_its_parts_and_its_rates(self, client):
-        client.post("/api/cash", json={"name": "Wise", "currency": "USD", "balance": 100})
+        set_cash(client, "USD", 100, "Wise")
         body = client.get("/api/portfolio").json()
         assert body["base_currency"] == "VND"
         assert body["cash_value"] == pytest.approx(2_600_000)
@@ -216,7 +276,7 @@ class TestPortfolio:
             "/api/assets",
             json={"symbol": "AAPL", "kind": "stock", "quantity": 10, "currency": "USD"},
         )
-        client.post("/api/cash", json={"name": "Vietcombank", "currency": "VND", "balance": 26_000_000})
+        set_cash(client, "VND", 26_000_000, "Vietcombank")
 
         client.patch("/api/settings", json={"base_currency": "USD"})
         switched = client.get("/api/portfolio").json()
@@ -263,7 +323,7 @@ class TestPortfolio:
         assert client.get("/api/portfolio/history").json()["points"] == []
 
     def test_a_snapshot_can_be_written_and_read_back(self, client):
-        client.post("/api/cash", json={"name": "Wise", "currency": "VND", "balance": 1_000})
+        set_cash(client, "VND", 1_000, "Wise")
         written = client.post("/api/portfolio/snapshot").json()
         assert written["total"] == pytest.approx(1_000)
         history = client.get("/api/portfolio/history").json()
@@ -373,25 +433,68 @@ class TestWiping:
             "/api/assets",
             json={"symbol": "AAPL", "kind": "stock", "quantity": 1, "currency": "USD"},
         )
-        client.post("/api/cash", json={"name": "Wise", "currency": "USD", "balance": 1})
+        set_cash(client, "USD", 1, "Wise")
         client.post("/api/portfolio/snapshot")
 
         removed = client.post("/api/settings/wipe").json()["removed"]
         assert removed["assets"] == 1
-        assert removed["cash"] == 1
+        # Two pots, because cash is one balance per currency. They are emptied
+        # rather than removed — the app still has cash, it has 0 in it.
+        assert removed["cash"] == 2
+        assert [row["balance"] for row in client.get("/api/cash").json()] == [0.0, 0.0]
         assert removed["valuations"] == 1
 
         portfolio = client.get("/api/portfolio").json()
         assert portfolio["assets"] == []
-        assert portfolio["cash"] == []
+        assert [row["balance"] for row in portfolio["cash"]] == [0.0, 0.0]
         assert portfolio["total"] == 0.0
+        assert portfolio["movements"] == []
         assert client.get("/api/portfolio/history").json()["points"] == []
+
+    def test_a_wipe_removes_every_record_not_only_the_obvious_ones(self, client):
+        """Savings, gold and recorded sales are the user's data too, and a wipe
+        that leaves them behind is the worst kind: the user believes the machine
+        is clean and half of what they typed is still on it."""
+        position = client.post(
+            "/api/assets",
+            json={
+                "symbol": "VIC.VN",
+                "kind": "stock",
+                "quantity": 100,
+                "cost_basis": 9_000_000,
+                "currency": "VND",
+            },
+        ).json()
+        client.post(
+            f"/api/assets/{position['id']}/sell",
+            json={"quantity": 100, "proceeds": 12_000_000},
+        )
+        client.post(
+            "/api/deposits",
+            json={
+                "name": "VCB",
+                "currency": "VND",
+                "principal": 70_000_000,
+                "annual_rate": 7,
+                "start_date": "2026-05-07",
+                "maturity_date": "2026-11-09",
+            },
+        )
+
+        removed = client.post("/api/settings/wipe").json()["removed"]
+        assert removed["realized"] == 1
+        assert removed["deposits"] == 1
+
+        portfolio = client.get("/api/portfolio").json()
+        assert portfolio["realized"] == []
+        assert portfolio["deposits"] == []
+        assert portfolio["total"] == 0.0
 
     def test_a_wipe_keeps_what_makes_the_app_work(self, client):
         """The rate and the display currency survive: a fresh start must still
         be able to convert something, or the user is left with an app that
         cannot add up what they are about to type in."""
-        client.post("/api/cash", json={"name": "Wise", "currency": "USD", "balance": 1})
+        set_cash(client, "USD", 1, "Wise")
         client.post("/api/settings/wipe")
 
         settings = client.get("/api/settings").json()
@@ -399,9 +502,16 @@ class TestWiping:
         assert client.get("/api/fx").json() != []
 
     def test_a_wipe_of_an_empty_database_is_not_an_error(self, client):
+        # `cash: 2` and not 0: the two pots exist in a database nobody has used
+        # (they are what cash IS), and a wipe empties them rather than removing
+        # them, so the next page still has somewhere for money to be.
         assert client.post("/api/settings/wipe").json()["removed"] == {
             "assets": 0,
-            "cash": 0,
+            "realized": 0,
+            "movements": 0,
+            "cash": 2,
+            "deposits": 0,
+            "gold": 0,
             "valuations": 0,
         }
 
@@ -495,7 +605,9 @@ class TestDeposits:
 
     def test_a_deposit_can_be_deleted(self, client):
         created = self._create(client).json()
-        assert client.delete(f"/api/deposits/{created['id']}").status_code == 204
+        removed = client.delete(f"/api/deposits/{created['id']}")
+        assert removed.status_code == 200
+        assert removed.json()["cash"]["moved"] is False
         assert client.get("/api/deposits").json() == []
 
     def test_the_schedule_runs_to_maturity(self, client):
@@ -575,22 +687,31 @@ class TestDeposits:
         result = client.post(f"/api/deposits/{created['id']}/withdraw", json={}).json()
 
         assert result["amount"] == pytest.approx(created["value"])
-        assert result["cash"]["balance"] == pytest.approx(created["value"])
-        assert result["cash"]["currency"] == "VND"
+        assert result["account"]["balance"] == pytest.approx(created["value"])
+        assert result["account"]["currency"] == "VND"
+        # With the cash link off — which is the default this test runs under —
+        # there is no account to credit, so one is created for the money and no
+        # movement is recorded.
+        # The one movement the link does not govern: the money is arriving, and
+        # the pot is the only place it can go — so it lands with a line of
+        # history saying why, even with the link off.
+        assert result["cash"]["moved"] is True
         # The deposit is gone, so the money is not counted twice.
         assert client.get("/api/deposits").json() == []
-        assert len(client.get("/api/cash").json()) == 1
+        assert len(client.get("/api/cash").json()) == 2
 
-    def test_withdrawing_can_name_the_account_and_the_amount(self, client):
+    def test_withdrawing_can_state_what_the_bank_actually_paid(self, client):
         created = self._create(
             client, start_date="2020-01-01", maturity_date="2020-07-01"
         ).json()
         result = client.post(
             f"/api/deposits/{created['id']}/withdraw",
-            json={"account_name": "Vietcombank tiết kiệm", "balance": 600_000_000},
+            json={"balance": 600_000_000},
         ).json()
-        assert result["cash"]["name"] == "Vietcombank tiết kiệm"
-        assert result["cash"]["balance"] == 600_000_000
+        # The pot is the only place the money can land, so it lands there with
+        # the amount the user gave rather than the arithmetic's.
+        assert result["account"]["currency"] == "VND"
+        assert result["account"]["balance"] == 600_000_000
 
     def test_a_withdrawal_leaves_the_total_whole(self, client):
         """Moving money between two tables must not create or destroy any."""

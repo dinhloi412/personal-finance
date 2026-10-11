@@ -1,14 +1,16 @@
 """ORM models for SoTaiSan.
 
-Seven tables, one idea each:
+Nine tables, one idea each:
 
 - `instruments`  what a symbol IS (name, kind, listing currency). Identity.
 - `assets`       a market position you hold (stocks, funds, crypto).
-- `cash_accounts` a manual balance, edited by hand when it moves.
+- `realized`     a market position you SOLD: the trade, kept after the row goes.
+- `cash_accounts` the cash balance: one pot per currency, accumulated into.
+- `cash_flows`   one movement of that balance, and what caused it.
 - `price_cache`  the last quote seen per symbol, with the close date it is for.
 - `fx_rates`     units of a currency per 1 base, one row per published day.
 - `valuations`   a dated record of the whole net worth, in the base of its day.
-- `settings`     key/value: base currency, language.
+- `settings`     key/value: base currency, language, whether cash is linked.
 
 Two rules run through all of it:
 
@@ -22,7 +24,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -111,16 +121,78 @@ class Asset(Base):
     __table_args__ = (Index("ix_assets_kind", "kind"),)
 
 
-class CashAccount(Base):
-    """Cash, in its own table because it is its own kind of thing.
+class Realized(Base):
+    """One closed market position: what was sold, for how much, and what went.
 
-    There is no symbol, no quantity and no price: there is a balance and the
-    day it was written down. When the user edits it, that is the whole update.
+    A position that has been sold leaves `assets`, and the gain it locked in
+    must not leave with it. This table is that record and nothing more. It keeps
+    the *facts of the trade* in the currencies they happened in — `cost_removed`
+    in the position's own currency, `proceeds` in the market's — and every
+    base-currency figure is derived on read, exactly as it is for a live
+    position. That is what separates this table from `valuations`: a valuation
+    point is a total frozen on a day, while a sale is a holding-shaped fact that
+    is still converted the way the rest of the portfolio is.
+
+    Two consequences of that, both deliberate:
+
+    - **No foreign key to `instruments`.** The row has to stay readable after
+      the position is gone, so it carries its own `symbol`, `name` and `kind`.
+      An FK would make history depend on a registry row that exists for the sake
+      of live quotes.
+    - **`cost_removed` is proportional** to the part of the position sold — the
+      arithmetic is in `app.realized`, and the reason it must be proportional
+      rather than exact is that only the position's *total* cost was ever
+      recorded. It is nullable for the same reason `assets.cost_basis` is: a
+      sale whose cost nobody wrote down is a sale whose gain is unknown, not a
+      sale that made a profit.
+    """
+
+    __tablename__ = "realized"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # MarketKind
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+    #: Units sold. Always positive — this row records a sale, not a movement.
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    #: The currency `cost_removed` is in: the position's, which is where the
+    #: cost was recorded and is not necessarily where the share was quoted.
+    currency: Mapped[str] = mapped_column(String, nullable=False)
+
+    #: The part of the position's cost basis that this sale released, in
+    #: `currency`. Null when the position never had a cost recorded.
+    cost_removed: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Total received, in `proceeds_currency` — the market's currency for the
+    #: symbol, or the position's own when no quote was ever seen.
+    proceeds: Mapped[float] = mapped_column(Float, nullable=False)
+    proceeds_currency: Mapped[str] = mapped_column(String, nullable=False)
+
+    sold_on: Mapped[str] = mapped_column(String, nullable=False, index=True)  # YYYY-MM-DD
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+
+
+class CashAccount(Base):
+    """Cash: **one pot per currency**, accumulated into by every trade.
+
+    There is no symbol, no quantity and no price: there is a balance and the day
+    it was written down. When the user edits it, that is the whole update —
+    which is still true, and still the reason this table exists rather than a
+    ledger.
+
+    What it is *not* is a list. A user has a bank balance in đồng and sometimes
+    one in dollars, not five piles of money to choose between, so there is one
+    row per currency and the currency is its identity: `UniqueConstraint` says
+    so, and `app.cash` is what makes it true (creating the two pots, and merging
+    the duplicates an older database may still hold).
     """
 
     __tablename__ = "cash_accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    #: A label for the pot — `VND`, `USD`, or whatever the user calls that
+    #: balance. It is never the thing that identifies it: the currency is.
     name: Mapped[str] = mapped_column(String, nullable=False)
     currency: Mapped[str] = mapped_column(String, nullable=False)  # Currency
     balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -128,6 +200,68 @@ class CashAccount(Base):
     balance_at: Mapped[str] = mapped_column(String, default=today_iso, nullable=False)
     created_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+
+    #: One pot per currency. Enforced by the database on a schema built from
+    #: these models; a database written before this constraint existed cannot
+    #: gain one (SQLite does not alter constraints), which is why `app.cash`
+    #: also enforces it — and merges what is already there.
+    __table_args__ = (UniqueConstraint("currency", name="uq_cash_accounts_currency"),)
+
+
+class CashMovement(Base):
+    """One movement of a cash balance, and what caused it.
+
+    Cash is still a balance the user counts — this table does not replace that,
+    and editing the balance by hand stays the whole update. What it adds is the
+    answer to a question the balance alone cannot answer: **where did it go, and
+    why**. Once trades can move money (see `app.movements`), a balance that
+    changed on its own would be a number with no story behind it.
+
+    Three things about the shape:
+
+    - **The amount is signed.** Negative is money leaving the account. A pair of
+      unsigned columns (`debit`/`credit`) would make every sum a decision about
+      which one to subtract, and the running balance on the page is a sum.
+    - **No foreign key to the holding.** The flow has to stay readable after the
+      position is deleted — that is exactly when the user wants to know what
+      happened — so it carries its own `symbol`/`name` snapshot, like
+      `Realized`. The account IS a foreign key, because a movement without an
+      account is not a movement; deleting an account takes its history with it.
+    - **`rate` is recorded when one was used.** A dollar purchase paid from a
+      dong account used a rate; keeping it makes the row reproducible, and
+      leaving it null says plainly that the two amounts were the same currency
+      and no rate was involved.
+    """
+
+    __tablename__ = "cash_movements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("cash_accounts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    #: What caused it: `asset` | `gold` | `deposit`, and which action.
+    subject: Mapped[str] = mapped_column(String, nullable=False)  # SubjectKind
+    action: Mapped[str] = mapped_column(String, nullable=False)  # FlowAction
+    #: The holding's id at the time. Null once the holding is gone; the flow is
+    #: history, not a pointer.
+    holding_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    #: Snapshotted, so a deleted position still reads as something.
+    symbol: Mapped[str | None] = mapped_column(String, nullable=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+    #: Signed, in `currency`: negative is money out of the account.
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String, nullable=False)
+    #: Units of `currency` per 1 unit of the holding's currency, when the two
+    #: differed. Null when no conversion was needed.
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    occurred_on: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+
+    __table_args__ = (Index("ix_cash_movements_subject", "subject", "holding_id"),)
 
 
 class Deposit(Base):
