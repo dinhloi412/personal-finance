@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* Light-only and neutral on purpose: this is a page someone reads while
+   deciding whether to buy something, and a theme preference would be one more
+   thing to store, migrate and get wrong. */
+
+:root {
+  color-scheme: light;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f8fafc;
+}
+
+/* Figures line up column-wise everywhere: a table of money whose digits do not
+   align is harder to read than one whose digits do. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+*:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 2px;
+}

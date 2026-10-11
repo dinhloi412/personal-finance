@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 620" width="1040" height="620" role="img" aria-label="The Overview page: total net worth, allocation by kind, exposure by currency, and net worth over time.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2f7"/>
+    </linearGradient>
+    <style>
+      .t { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .muted { fill: #64748b; }
+      .ink { fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #e2e8f0; }
+    </style>
+  </defs>
+
+  <rect width="1040" height="620" fill="url(#bg)"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="1040" height="56" fill="#ffffff" stroke="#e2e8f0"/>
+  <text class="t ink" x="28" y="35" font-size="15" font-weight="600">SoTaiSan</text>
+  <text class="t muted" x="112" y="35" font-size="12">Theo dõi cổ phiếu, quỹ, coin và tiền mặt</text>
+  <g class="t" font-size="12.5" font-weight="500">
+    <rect x="360" y="16" width="84" height="26" rx="7" fill="#0f172a"/>
+    <text x="402" y="33" fill="#ffffff" text-anchor="middle">Tổng quan</text>
+    <text class="muted" x="470" y="33" text-anchor="middle">Danh mục</text>
+    <text class="muted" x="544" y="33" text-anchor="middle">Tiền mặt</text>
+    <text class="muted" x="614" y="33" text-anchor="middle">Thị trường</text>
+    <text class="muted" x="690" y="33" text-anchor="middle">Cài đặt</text>
+  </g>
+  <text class="t muted" x="880" y="26" font-size="10.5" text-anchor="end">Tổng tài sản</text>
+  <text class="t ink" x="880" y="42" font-size="13" font-weight="600" text-anchor="end">1.201.446.354 ₫</text>
+
+  <!-- total card -->
+  <rect class="card" x="28" y="80" width="640" height="132" rx="14"/>
+  <text class="t muted" x="52" y="110" font-size="11" font-weight="600" letter-spacing="1">TỔNG TÀI SẢN</text>
+  <text class="t ink" x="52" y="152" font-size="34" font-weight="700">1.201.446.354 ₫</text>
+  <g class="t">
+    <text class="muted" x="52" y="182" font-size="11">Giá trị thị trường</text>
+    <text class="ink" x="52" y="199" font-size="14" font-weight="600">1.014.907.892 ₫</text>
+    <text class="muted" x="212" y="182" font-size="11">Tiền mặt</text>
+    <text class="ink" x="212" y="199" font-size="14" font-weight="600">186.538.462 ₫</text>
+    <text class="muted" x="372" y="182" font-size="11">Lãi/lỗ</text>
+    <text x="372" y="199" font-size="14" font-weight="600" fill="#059669">+135,25%</text>
+  </g>
+
+  <!-- allocation card -->
+  <rect class="card" x="688" y="80" width="324" height="272" rx="14"/>
+  <text class="t ink" x="712" y="108" font-size="13" font-weight="600">Cơ cấu theo loại</text>
+  <text class="t muted" x="712" y="126" font-size="10.5">Tỷ trọng từng loại tài sản trong tổng giá trị</text>
+
+  <g transform="translate(850,206)">
+    <circle r="58" fill="none" stroke="#0f172a" stroke-width="26" stroke-dasharray="182 182" transform="rotate(-90)"/>
+    <circle r="58" fill="none" stroke="#0284c7" stroke-width="26" stroke-dasharray="83 281" transform="rotate(64)"/>
+    <circle r="58" fill="none" stroke="#f59e0b" stroke-width="26" stroke-dasharray="49 315" transform="rotate(165)"/>
+    <circle r="58" fill="none" stroke="#059669" stroke-width="26" stroke-dasharray="44 320" transform="rotate(221)"/>
+  </g>
+
+  <g class="t" font-size="11.5">
+    <circle cx="730" cy="288" r="4.5" fill="#0f172a"/>
+    <text class="muted" x="742" y="292">Cổ phiếu</text>
+    <text class="ink" x="988" y="292" text-anchor="end">695.744.881 ₫</text>
+    <circle cx="730" cy="310" r="4.5" fill="#0284c7"/>
+    <text class="muted" x="742" y="314">Quỹ</text>
+    <text class="ink" x="988" y="314" text-anchor="end">0 ₫</text>
+    <circle cx="730" cy="332" r="4.5" fill="#f59e0b"/>
+    <text class="muted" x="742" y="336">Coin</text>
+    <text class="ink" x="988" y="336" text-anchor="end">319.163.011 ₫</text>
+  </g>
+
+  <!-- exposure card -->
+  <rect class="card" x="28" y="228" width="640" height="124" rx="14"/>
+  <text class="t ink" x="52" y="256" font-size="13" font-weight="600">Theo loại tiền</text>
+  <text class="t muted" x="52" y="274" font-size="10.5">Cột “quy đổi” mới so sánh được giữa các dòng.</text>
+  <g class="t" font-size="11.5">
+    <text class="muted" x="52" y="300" font-size="10" font-weight="600">LOẠI TIỀN</text>
+    <text class="muted" x="420" y="300" font-size="10" font-weight="600" text-anchor="end">SỐ TIỀN GỐC</text>
+    <text class="muted" x="644" y="300" font-size="10" font-weight="600" text-anchor="end">QUY ĐỔI</text>
+
+    <text class="ink" x="52" y="322" font-weight="600">VND</text>
+    <text class="muted" x="420" y="322" text-anchor="end">604.950.000 ₫</text>
+    <text class="ink" x="644" y="322" text-anchor="end">604.950.000 ₫</text>
+
+    <text class="ink" x="52" y="342" font-weight="600">USD</text>
+    <text class="muted" x="420" y="342" text-anchor="end">$23.263,42</text>
+    <text class="ink" x="644" y="342" text-anchor="end">596.496.354 ₫</text>
+  </g>
+
+  <!-- history card -->
+  <rect class="card" x="28" y="368" width="984" height="220" rx="14"/>
+  <text class="t ink" x="52" y="396" font-size="13" font-weight="600">Diễn biến tài sản</text>
+  <text class="t muted" x="52" y="414" font-size="10.5">Mỗi mốc ghi lại loại tiền tại thời điểm ghi.</text>
+
+  <g stroke="#e2e8f0" stroke-dasharray="3 3">
+    <line x1="72" y1="446" x2="988" y2="446"/>
+    <line x1="72" y1="486" x2="988" y2="486"/>
+    <line x1="72" y1="526" x2="988" y2="526"/>
+  </g>
+
+  <polyline fill="none" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round"
+    points="72,528 168,516 264,500 360,505 456,478 552,462 648,455 744,438 840,432 936,420 988,412"/>
+  <g fill="#0f172a">
+    <circle cx="72" cy="528" r="3"/><circle cx="264" cy="500" r="3"/>
+    <circle cx="456" cy="478" r="3"/><circle cx="648" cy="455" r="3"/>
+    <circle cx="840" cy="432" r="3"/><circle cx="988" cy="412" r="3"/>
+  </g>
+
+  <g class="t muted" font-size="10">
+    <text x="72" y="560">01/01</text>
+    <text x="300" y="560">03/01</text>
+    <text x="530" y="560">07/01</text>
+    <text x="760" y="560">11/01</text>
+    <text x="988" y="560" text-anchor="end">Hôm nay</text>
+  </g>
+
+  <!-- rates strip -->
+  <rect class="card" x="28" y="600" width="984" height="0" rx="14"/>
+</svg>

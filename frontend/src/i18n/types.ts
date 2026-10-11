@@ -1,0 +1,225 @@
+/**
+ * The shape of the dictionary, defined once.
+ *
+ * Both `vi` and `en` are declared `Dict`, so a key added to one language and
+ * forgotten in the other is a compile error rather than a blank label someone
+ * notices months later. That is the entire reason this interface exists
+ * instead of two loose objects.
+ *
+ * Keys are flat and dotted (`dashboard.total`) rather than nested: a flat map
+ * makes "is this key translated?" a question with a one-line answer, and makes
+ * a diff of two languages readable.
+ */
+
+export interface Dict {
+  // -- identity -------------------------------------------------------------
+  "app.name": string;
+  "app.tagline": string;
+  "app.offline_note": string;
+
+  // -- navigation -----------------------------------------------------------
+  "nav.dashboard": string;
+  "nav.holdings": string;
+  "nav.cash": string;
+  "nav.market": string;
+  "nav.settings": string;
+
+  // -- generic actions ------------------------------------------------------
+  "action.save": string;
+  "action.cancel": string;
+  "action.edit": string;
+  "action.delete": string;
+  "action.confirm": string;
+  "action.close": string;
+  "action.add": string;
+  "action.refresh": string;
+  "action.retry": string;
+  "action.copy": string;
+  "action.copied": string;
+  "action.dismiss": string;
+
+  // -- generic states -------------------------------------------------------
+  "state.loading": string;
+  "state.error": string;
+  "state.empty": string;
+  "state.saving": string;
+  "state.optional": string;
+  "state.unknown": string;
+  "state.not_counted": string;
+
+  // -- domain words ---------------------------------------------------------
+  "kind.stock": string;
+  "kind.fund": string;
+  "kind.crypto": string;
+  "kind.cash": string;
+  "kind.all": string;
+
+  "currency.VND": string;
+  "currency.USD": string;
+  "field.currency": string;
+  "field.base_currency": string;
+
+  // A language names itself, so these two read the same in both dictionaries.
+  "lang.vi": string;
+  "lang.en": string;
+
+  // -- why a figure is missing ---------------------------------------------
+  "reason.unpriced": string;
+  "reason.not_convertible": string;
+  "reason.no_quantity": string;
+  "reason.no_cost": string;
+  "reason.hint": string;
+
+  // -- dashboard ------------------------------------------------------------
+  "dash.title": string;
+  "dash.total": string;
+  "dash.market_value": string;
+  "dash.cash_value": string;
+  "dash.gain": string;
+  "dash.gain_pct": string;
+  "dash.gain_unknown": string;
+  "dash.allocation": string;
+  "dash.allocation_hint": string;
+  "dash.exposure": string;
+  "dash.exposure_hint": string;
+  "dash.exposure_amount": string;
+  "dash.exposure_in_base": string;
+  "dash.history": string;
+  "dash.history_empty": string;
+  "dash.history_mixed_base": string;
+  "dash.rates": string;
+  "dash.rate_stale": string;
+  "dash.rate_as_of": string;
+  "dash.unconverted": string;
+  "dash.unconverted_hint": string;
+  "dash.snapshot": string;
+  "dash.snapshot_done": string;
+  "dash.refresh": string;
+  "dash.refresh_done": string;
+  "dash.refresh_failed": string;
+  "dash.empty_title": string;
+  "dash.empty_body": string;
+  "dash.count_assets": string;
+  "dash.count_cash": string;
+
+  // -- positions ------------------------------------------------------------
+  "hold.title": string;
+  "hold.add": string;
+  "hold.edit": string;
+  "hold.search": string;
+  "hold.search_placeholder": string;
+  "hold.count": string;
+  "hold.total": string;
+  "hold.symbol": string;
+  "hold.name": string;
+  "hold.kind": string;
+  "hold.quantity": string;
+  "hold.price": string;
+  "hold.price_date": string;
+  "hold.value": string;
+  "hold.cost": string;
+  "hold.gain": string;
+  "hold.gain_pct": string;
+  "hold.actions": string;
+  "hold.price_now": string;
+  "hold.delete_confirm": string;
+  "hold.none_title": string;
+  "hold.none_body": string;
+  "hold.none_filtered": string;
+
+  // -- the position form ----------------------------------------------------
+  "form.add_title": string;
+  "form.edit_title": string;
+  "form.symbol": string;
+  "form.symbol_hint": string;
+  "form.name": string;
+  "form.kind": string;
+  "form.quantity": string;
+  "form.cost_basis": string;
+  "form.cost_basis_hint": string;
+  "form.currency": string;
+  "form.currency_hint": string;
+  "form.note": string;
+  "form.required": string;
+  "form.save_failed": string;
+
+  // -- instrument picker ----------------------------------------------------
+  "pick.search": string;
+  "pick.placeholder": string;
+  "pick.searching": string;
+  "pick.no_results": string;
+  "pick.degraded": string;
+  "pick.type_anyway": string;
+  "pick.choose": string;
+
+  // -- cash -----------------------------------------------------------------
+  "cash.title": string;
+  "cash.add": string;
+  "cash.manual_note": string;
+  "cash.name": string;
+  "cash.balance": string;
+  "cash.balance_at": string;
+  "cash.note": string;
+  "cash.value_in_base": string;
+  "cash.subtotal": string;
+  "cash.edit_title": string;
+  "cash.delete_confirm": string;
+  "cash.edit_balance": string;
+  "cash.balance_saved": string;
+  "cash.none_title": string;
+  "cash.none_body": string;
+  "cash.total": string;
+
+  // -- market ---------------------------------------------------------------
+  "market.title": string;
+  "market.prices": string;
+  "market.prices_note": string;
+  "market.symbol": string;
+  "market.price": string;
+  "market.currency_of_quote": string;
+  "market.close_date": string;
+  "market.fetched_at": string;
+  "market.row_error": string;
+  "market.rates": string;
+  "market.rates_note": string;
+  "market.base": string;
+  "market.rate": string;
+  "market.source": string;
+  "market.source_feed": string;
+  "market.source_seed": string;
+  "market.source_other": string;
+  "market.seed_warning": string;
+  "market.refresh_prices": string;
+  "market.refresh_rates": string;
+  "market.refresh_done": string;
+  "market.refresh_failed": string;
+  "market.refresh_error": string;
+  "market.rate_date": string;
+  "market.stale": string;
+  "market.nothing_cached": string;
+  "market.no_rates": string;
+
+  // -- settings -------------------------------------------------------------
+  "set.title": string;
+  "set.language": string;
+  "set.language_hint": string;
+  "set.base_currency": string;
+  "set.base_currency_hint": string;
+  "set.about": string;
+  "set.version": string;
+  "set.database": string;
+  "set.database_hint": string;
+  "set.danger": string;
+  "set.danger_hint": string;
+  "set.wipe": string;
+  "set.wipe_confirm_title": string;
+  "set.wipe_confirm_body": string;
+  "set.wipe_done": string;
+  "set.scope": string;
+  "set.scope_tracks": string;
+  "set.scope_does_not": string;
+  "set.save_failed": string;
+}
+
+export type TranslationKey = keyof Dict;
+export type Vars = Record<string, string | number>;

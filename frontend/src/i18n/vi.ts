@@ -1,0 +1,245 @@
+/**
+ * Tiếng Việt — the dictionary the app is written in first.
+ *
+ * Wording rules, kept deliberately consistent so the interface does not read
+ * like two people wrote it:
+ *
+ * - "tài sản" for a holding, "vị thế" for one position.
+ * - Money is "số dư" for cash and "giá trị" for a valuation.
+ * - A figure we do not know is said to be unknown ("chưa có giá"), never shown
+ *   as zero.
+ * - Sentence case, no trailing full stop on labels, full sentences only in
+ *   the explanations.
+ */
+
+import type { Dict } from "./types";
+
+export const vi: Dict = {
+  // -- identity -------------------------------------------------------------
+  "app.name": "Sổ Tài Sản",
+  "app.tagline": "Theo dõi cổ phiếu, quỹ, coin và tiền mặt",
+  "app.offline_note":
+    "Dữ liệu nằm trên máy của bạn. Chỉ có giá thị trường và tỷ giá được lấy từ internet.",
+
+  // -- navigation -----------------------------------------------------------
+  "nav.dashboard": "Tổng quan",
+  "nav.holdings": "Danh mục",
+  "nav.cash": "Tiền mặt",
+  "nav.market": "Thị trường",
+  "nav.settings": "Cài đặt",
+
+  // -- generic actions ------------------------------------------------------
+  "action.save": "Lưu",
+  "action.cancel": "Huỷ",
+  "action.edit": "Sửa",
+  "action.delete": "Xoá",
+  "action.confirm": "Xác nhận",
+  "action.close": "Đóng",
+  "action.add": "Thêm",
+  "action.refresh": "Cập nhật",
+  "action.retry": "Thử lại",
+  "action.copy": "Sao chép",
+  "action.copied": "Đã sao chép",
+  "action.dismiss": "Bỏ qua",
+
+  // -- generic states -------------------------------------------------------
+  "state.loading": "Đang tải…",
+  "state.error": "Không tải được dữ liệu",
+  "state.empty": "Chưa có gì",
+  "state.saving": "Đang lưu…",
+  "state.optional": "không bắt buộc",
+  "state.unknown": "Chưa biết",
+  "state.not_counted": "Không tính vào tổng",
+
+  // -- domain words ---------------------------------------------------------
+  "kind.stock": "Cổ phiếu",
+  "kind.fund": "Quỹ",
+  "kind.crypto": "Coin",
+  "kind.cash": "Tiền mặt",
+  "kind.all": "Tất cả",
+
+  "currency.VND": "VNĐ",
+  "currency.USD": "USD",
+  "field.currency": "Loại tiền",
+  "field.base_currency": "Tiền tệ hiển thị",
+
+  "lang.vi": "Tiếng Việt",
+  "lang.en": "English",
+
+  // -- why a figure is missing ---------------------------------------------
+  "reason.unpriced": "Chưa có giá",
+  "reason.not_convertible": "Không đổi được sang tiền tệ hiển thị",
+  "reason.no_quantity": "Khối lượng bằng 0",
+  "reason.no_cost": "Chưa ghi giá vốn",
+  "reason.hint":
+    "Những vị thế này không được cộng vào tổng. Hãy cập nhật giá, hoặc dùng mã được niêm yết bằng VNĐ/USD.",
+
+  // -- dashboard ------------------------------------------------------------
+  "dash.title": "Tổng quan",
+  "dash.total": "Tổng tài sản",
+  "dash.market_value": "Giá trị thị trường",
+  "dash.cash_value": "Tiền mặt",
+  "dash.gain": "Lãi/lỗ",
+  "dash.gain_pct": "Tỷ lệ lãi/lỗ",
+  "dash.gain_unknown": "Chưa tính được vì có vị thế thiếu giá vốn",
+  "dash.allocation": "Cơ cấu theo loại",
+  "dash.allocation_hint": "Tỷ trọng từng loại tài sản trong tổng giá trị",
+  "dash.exposure": "Theo loại tiền",
+  "dash.exposure_hint":
+    "Cột “quy đổi” mới so sánh được giữa các dòng; cột số lượng là số tiền gốc theo từng loại tiền.",
+  "dash.exposure_amount": "Số tiền gốc",
+  "dash.exposure_in_base": "Quy đổi",
+  "dash.history": "Diễn biến tài sản",
+  "dash.history_empty":
+    "Chưa có dữ liệu lịch sử. Bấm “Ghi lại hôm nay” để lưu mốc đầu tiên.",
+  "dash.history_mixed_base":
+    "Các mốc bên dưới được ghi bằng nhiều loại tiền tệ khác nhau nên không vẽ chung một đường.",
+  "dash.rates": "Tỷ giá đang dùng",
+  "dash.rate_stale": "Tỷ giá tạm tính",
+  "dash.rate_as_of": "Ngày {date}",
+  "dash.unconverted": "Chưa tính vào tổng",
+  "dash.unconverted_hint":
+    "Tổng ở trên không bao gồm các mục này, nên con số thực tế sẽ cao hơn.",
+  "dash.snapshot": "Ghi lại hôm nay",
+  "dash.snapshot_done": "Đã ghi lại giá trị hôm nay",
+  "dash.refresh": "Cập nhật giá và tỷ giá",
+  "dash.refresh_done": "Đã cập nhật {count} mã",
+  "dash.refresh_failed": "Không lấy được giá: {list}",
+  "dash.empty_title": "Chưa có tài sản nào",
+  "dash.empty_body":
+    "Bắt đầu bằng cách thêm một vị thế ở trang Danh mục, hoặc ghi số dư tiền mặt ở trang Tiền mặt.",
+  "dash.count_assets": "{count} vị thế",
+  "dash.count_cash": "{count} khoản tiền mặt",
+
+  // -- positions ------------------------------------------------------------
+  "hold.title": "Danh mục",
+  "hold.add": "Thêm vị thế",
+  "hold.edit": "Sửa vị thế",
+  "hold.search": "Tìm kiếm",
+  "hold.search_placeholder": "Tìm theo mã hoặc tên",
+  "hold.count": "Số vị thế",
+  "hold.total": "Tổng giá trị",
+  "hold.symbol": "Mã",
+  "hold.name": "Tên",
+  "hold.kind": "Loại",
+  "hold.quantity": "Khối lượng",
+  "hold.price": "Giá",
+  "hold.price_date": "Ngày giá",
+  "hold.value": "Giá trị",
+  "hold.cost": "Giá vốn",
+  "hold.gain": "Lãi/lỗ",
+  "hold.gain_pct": "Lãi/lỗ %",
+  "hold.actions": "Thao tác",
+  "hold.price_now": "Lấy giá mới",
+  "hold.delete_confirm": "Xoá vị thế {symbol}?",
+  "hold.none_title": "Danh mục đang trống",
+  "hold.none_body":
+    "Thêm cổ phiếu, quỹ hoặc coin đầu tiên. Giá sẽ được lấy tự động từ thị trường.",
+  "hold.none_filtered": "Không có vị thế nào khớp với bộ lọc hiện tại.",
+
+  // -- the position form ----------------------------------------------------
+  "form.add_title": "Thêm vị thế",
+  "form.edit_title": "Sửa vị thế",
+  "form.symbol": "Mã / Ticker",
+  "form.symbol_hint":
+    "Ví dụ: AAPL, VIC.VN, VWCE.DE, BTC-USD. Gõ để tìm, hoặc nhập thẳng mã.",
+  "form.name": "Tên",
+  "form.kind": "Loại tài sản",
+  "form.quantity": "Khối lượng",
+  "form.cost_basis": "Tổng giá vốn",
+  "form.cost_basis_hint":
+    "Tổng số tiền đã bỏ ra, không phải giá mỗi đơn vị. Bỏ trống nếu không nhớ — khi đó sẽ không hiện được lãi/lỗ.",
+  "form.currency": "Tiền tệ của giá vốn",
+  "form.currency_hint": "Chỉ hỗ trợ VNĐ và USD.",
+  "form.note": "Ghi chú",
+  "form.required": "Bắt buộc",
+  "form.save_failed": "Không lưu được",
+
+  // -- instrument picker ----------------------------------------------------
+  "pick.search": "Tìm mã",
+  "pick.placeholder": "Nhập tên hoặc mã, ví dụ Apple hoặc VIC.VN",
+  "pick.searching": "Đang tìm…",
+  "pick.no_results": "Không tìm thấy mã nào",
+  "pick.degraded":
+    "Không kết nối được nguồn tìm kiếm. Bạn vẫn có thể nhập thẳng mã ở ô trên.",
+  "pick.type_anyway": "Dùng mã đã nhập",
+  "pick.choose": "Chọn mã này",
+
+  // -- cash -----------------------------------------------------------------
+  "cash.title": "Tiền mặt",
+  "cash.add": "Thêm khoản tiền mặt",
+  "cash.manual_note":
+    "Tiền mặt là số dư bạn tự ghi lại. Khi tiền biến động, sửa trực tiếp vào ô số dư — chỉ một thao tác.",
+  "cash.name": "Tên",
+  "cash.balance": "Số dư",
+  "cash.balance_at": "Ghi ngày",
+  "cash.note": "Ghi chú",
+  "cash.value_in_base": "Quy đổi",
+  "cash.subtotal": "Tổng theo loại tiền",
+  "cash.edit_title": "Sửa khoản tiền mặt",
+  "cash.delete_confirm": "Xoá khoản tiền mặt {name}?",
+  "cash.edit_balance": "Sửa số dư",
+  "cash.balance_saved": "Đã lưu số dư",
+  "cash.none_title": "Chưa có khoản tiền mặt nào",
+  "cash.none_body":
+    "Thêm tài khoản ngân hàng hoặc ví đầu tiên, kèm số dư hiện tại.",
+  "cash.total": "Tổng quy đổi",
+
+  // -- market ---------------------------------------------------------------
+  "market.title": "Thị trường",
+  "market.prices": "Giá đã lưu",
+  "market.prices_note":
+    "“Ngày giá” là phiên giao dịch mà con số thuộc về; “lấy lúc” là lần cuối hỏi nguồn. Giá cũ vẫn dùng được, miễn là biết nó cũ.",
+  "market.symbol": "Mã",
+  "market.price": "Giá",
+  "market.currency_of_quote": "Loại tiền của giá",
+  "market.close_date": "Ngày giá",
+  "market.fetched_at": "Lấy lúc",
+  "market.row_error": "Lỗi khi lấy giá",
+  "market.rates": "Tỷ giá",
+  "market.rates_note":
+    "“feed” là tỷ giá thật lấy từ nguồn; “seed” là con số tạm dùng khi chưa có mạng.",
+  "market.base": "Tiền tệ gốc",
+  "market.rate": "Tỷ giá",
+  "market.source": "Nguồn",
+  "market.source_feed": "Nguồn thật",
+  "market.source_seed": "Tạm tính",
+  "market.source_other": "Khác",
+  "market.seed_warning":
+    "Đang dùng tỷ giá tạm tính. Hãy bấm “Cập nhật tỷ giá” khi có mạng.",
+  "market.refresh_prices": "Cập nhật giá",
+  "market.refresh_rates": "Cập nhật tỷ giá",
+  "market.refresh_done": "Đã cập nhật {count} mục",
+  "market.refresh_failed": "Không lấy được giá: {list}",
+  "market.refresh_error": "Nguồn tỷ giá báo lỗi",
+  "market.rate_date": "Ngày tỷ giá",
+  "market.stale": "Cũ",
+  "market.nothing_cached": "Chưa có giá nào được lưu.",
+  "market.no_rates": "Chưa có tỷ giá nào được lưu.",
+
+  // -- settings -------------------------------------------------------------
+  "set.title": "Cài đặt",
+  "set.language": "Ngôn ngữ",
+  "set.language_hint": "Đổi ngôn ngữ áp dụng ngay, không cần tải lại trang.",
+  "set.base_currency": "Tiền tệ hiển thị",
+  "set.base_currency_hint":
+    "Mọi con số sẽ được quy đổi sang loại tiền này. Các mốc lịch sử đã ghi vẫn giữ nguyên loại tiền lúc ghi.",
+  "set.about": "Thông tin",
+  "set.version": "Phiên bản",
+  "set.database": "Tệp dữ liệu",
+  "set.database_hint": "Sao lưu tệp này là sao lưu toàn bộ dữ liệu của bạn.",
+  "set.danger": "Xoá dữ liệu",
+  "set.danger_hint":
+    "Xoá toàn bộ vị thế, số dư tiền mặt và các mốc đã ghi. Cài đặt và giá đã lưu vẫn giữ lại. Không hoàn tác được.",
+  "set.wipe": "Xoá toàn bộ dữ liệu",
+  "set.wipe_confirm_title": "Xoá toàn bộ dữ liệu?",
+  "set.wipe_confirm_body":
+    "Toàn bộ vị thế, số dư tiền mặt và lịch sử sẽ bị xoá vĩnh viễn. Hãy sao lưu tệp dữ liệu trước nếu bạn chưa chắc.",
+  "set.wipe_done": "Đã xoá {count} mục",
+  "set.scope": "Phạm vi",
+  "set.scope_tracks":
+    "Ứng dụng theo dõi: cổ phiếu, quỹ, coin và tiền mặt — với hai loại tiền VNĐ và USD.",
+  "set.scope_does_not":
+    "Ứng dụng không có: mục tiêu tài chính, tư vấn, nợ, thu chi, hay bất kỳ loại tiền nào khác.",
+  "set.save_failed": "Không lưu được cài đặt",
+};

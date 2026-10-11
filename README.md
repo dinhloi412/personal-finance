@@ -1,0 +1,145 @@
+# SoTaiSan
+
+A small, self-hosted tracker for **what you own and what it is worth**.
+
+Inspired by [aurelio-finance](https://github.com/LosaLosSantos/aurelio-finance),
+reduced to one job. Four things can be tracked — **stocks, funds, crypto, and
+cash** — in **VND and USD**, read in **Vietnamese or English**. That is the
+whole feature list; see [Scope](#scope) for what was deliberately left out.
+
+![Overview](docs/overview.svg)
+
+## Run it
+
+You need [Node.js](https://nodejs.org) 22 or later with `pnpm`, and
+[uv](https://docs.astral.sh/uv/). Then:
+
+```bash
+./start.sh              # your own records, in backend/data.db
+./start.sh --demo       # an invented portfolio, in backend/demo.db
+./start.sh --no-browser # start it without opening a browser
+```
+
+The first run installs what it needs and opens <http://localhost:8010>. Nothing
+else listens, nothing is uploaded, and your records never leave the machine.
+
+### Development
+
+```bash
+cd backend  && uv run uvicorn app.main:app --port 8010   # API with reload
+cd frontend && pnpm dev                                  # UI with hot reload
+```
+
+The dev server proxies `/api` to the backend, so the frontend always uses
+relative paths and there is no CORS surface in either mode.
+
+### Tests
+
+```bash
+cd backend  && uv run pytest      # 113 tests, no network access
+cd frontend && pnpm test          # dictionaries and formatters
+
+# and, against a running server with the real network:
+./scripts/acceptance.sh           # the acceptance criteria from docs/SPEC.md §9
+```
+
+The backend suite replaces every outbound call with a fake, so it passes on a
+plane. That is asserted by the fixtures in `backend/tests/conftest.py`, not by
+convention.
+
+## What it does
+
+**Overview** — the total across everything, split by kind and by currency,
+against a recorded history, with anything that could not be converted listed
+rather than quietly dropped.
+
+**Holdings** — stocks, funds and crypto, priced automatically from Yahoo
+Finance. A position carries a quantity and, optionally, what it cost; leave the
+cost blank and gain is reported as unknown rather than invented.
+
+**Cash** — a name, a currency, a balance. When the money moves you edit the
+number in place, in one action, and the date it was written down is stamped
+alongside it. This is intentional: a ledger nobody maintains is worse than a
+balance everybody updates.
+
+**Market** — every stored price and exchange rate with the dates that make them
+readable: the session a close belongs to, when it was fetched, and whether a
+rate is a published one or the placeholder used offline.
+
+**Settings** — the display currency and the language, the path to your database
+file so you know what to back up, and a wipe that deletes every record behind a
+confirmation (keeping your settings and the cached rates).
+
+## How the numbers stay honest
+
+Three rules, each of which is enforced in code and covered by tests:
+
+1. **A total is a sum of conversions, never a sum across mixed units.** Every
+   figure is converted into one display currency before it is added to
+   anything, by `backend/app/fx.py`.
+2. **An unknown figure is unknown, never zero.** A position with no price, no
+   cost, or a quote in a currency this app cannot convert is excluded from the
+   total and listed with the reason — a total that is short says so.
+3. **A number travels with its currency and its date.** A rate is stored per
+   day and per base; a valuation records the currency it was written in, so
+   changing the display currency later never rewrites history.
+
+## Supported symbols
+
+Yahoo Finance tickers: `AAPL` (US), `VIC.VN` and `FPT.VN` (HOSE), `VWCE.DE`
+(Xetra), `BTC-USD` and `BTC-EUR` (crypto pairs), `VOO` (US ETF). Type a name to
+search, or type the symbol directly — the search is a convenience, never a
+gate.
+
+**Why an ETF listed in EUR shows as "cannot convert".** This app holds two
+currencies. A quote in a third is reported, with its price and its date, but it
+is not converted — because converting it would mean inventing a rate for a
+currency you told the app you do not hold. Prefer a VND- or USD-quoted listing
+(`VOO` rather than `VWCE.DE`) if you want it in the total.
+
+## Scope
+
+Deliberately **not** here, in contrast to the project this was reduced from:
+
+- goals, targets, planning, accumulation plans
+- any AI advisor, chat, or agent — no OpenRouter, no MCP, no web search
+- income, expenses, budgets, cash-flow analysis
+- debts, liabilities, mortgages, real assets, insurance, pensions
+- look-through composition, dividends, tax reporting
+- accounts, sync, multi-user; anything that leaves this machine
+- currencies other than VND and USD
+
+`backend/tests/test_scope.py` fails if any of that grows back.
+
+## Repository layout
+
+```
+backend/app/
+  money.py          the shared vocabulary: currencies, kinds, languages
+  database.py       SQLite engine, session, the instrument-registering hook
+  models.py         the seven tables
+  market.py         Yahoo Finance: what a symbol is, what it closed at
+  fx.py             rates, and the rule that keeps a total honest
+  valuation.py      what it is all worth, in one currency
+  pricing.py        refreshing, and reporting per-symbol failures
+  settings_store.py the display currency and the language
+  routers/          assets, cash, portfolio, market, settings
+
+frontend/src/
+  api/              one function per endpoint, and the types it returns
+  i18n/             the dictionaries, t(), and every formatter
+  state/            the shared settings/portfolio state
+  components/       the interface kit and the symbol picker
+  views/            Overview, Holdings, Cash, Market, Settings
+```
+
+## Documentation
+
+- [docs/SPEC.md](docs/SPEC.md) — what this is, in detail: the domain model, the
+  currency and pricing rules, the API, and the acceptance criteria.
+- [docs/PLAN.md](docs/PLAN.md) — how it was built, milestone by milestone, with
+  the risks that shaped each decision.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
