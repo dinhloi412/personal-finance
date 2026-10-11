@@ -13,7 +13,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Query
 from sqlalchemy import select
 
-from app import market, models, pricing, settings_store
+from app import funds, market, models, pricing, settings_store
 from app.routers.deps import DbSession
 from app.schemas import (
     FxRefreshOut,
@@ -56,7 +56,41 @@ def search_symbols(
         if direct is not None:
             suggestions = [SuggestionOut(**asdict(direct))]
 
+    # Then the funds. A fund certificate is not listed, so Yahoo's search has
+    # nothing for it however it is spelled — and "DCDE" is not even the code
+    # the platform behind this lookup uses. Asked second, because a stock
+    # symbol answered above should not wait on a fund catalogue.
+    if not suggestions:
+        try:
+            suggestions = [_fund_suggestion(fund) for fund in funds.search(q)]
+        except funds.FundError:
+            # Yahoo already answered, or already did not; a second unreachable
+            # feed is not a second degradation to report.
+            pass
+
     return SearchOut(query=q, suggestions=suggestions, degraded=degraded)
+
+
+def _fund_suggestion(fund: funds.FundQuote) -> SuggestionOut:
+    """A search hit for an open-ended fund.
+
+    The name carries the platform's own code when the two differ, so a person
+    who typed `DCDE` can see that the thing being added is also called
+    `VFMVF4` — otherwise the same fund appears in two places under two names
+    and neither is recognisable as the other.
+    """
+    name = fund.name
+    if fund.product_code != fund.symbol:
+        name = f"{name} ({fund.product_code})"
+    if fund.owner:
+        name = f"{name} · {fund.owner}"
+    return SuggestionOut(
+        symbol=fund.symbol,
+        name=name,
+        kind="fund",
+        exchange="Fmarket",
+        currency=fund.currency,
+    )
 
 
 @router.get("/market", response_model=MarketOut)

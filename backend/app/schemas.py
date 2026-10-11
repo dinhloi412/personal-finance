@@ -281,6 +281,10 @@ class PriceRow(BaseModel):
     as_of: str
     fetched_at: str
     error: str | None = None
+    #: Where the number came from: "market" for a listed close, "fund" for a
+    #: NAV published by a fund's management company. A NAV and a close are not
+    #: the same kind of fact and the interface says which it is showing.
+    source: str = "market"
 
 
 class FxRow(BaseModel):

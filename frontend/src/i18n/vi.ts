@@ -243,13 +243,17 @@ export const vi: Dict = {
   // -- market ---------------------------------------------------------------
   "market.prices": "Giá đã lưu",
   "market.prices_note":
-    "“Ngày giá” là phiên giao dịch mà con số thuộc về; “lấy lúc” là lần cuối hỏi nguồn. Giá cũ vẫn dùng được, miễn là biết nó cũ.",
+    "“Ngày giá” là ngày mà con số thuộc về — phiên giao dịch với chứng khoán niêm yết, hoặc ngày chốt NAV với quỹ mở; “lấy lúc” là lần cuối hỏi nguồn. Giá cũ vẫn dùng được, miễn là biết nó cũ.",
   "market.symbol": "Mã",
   "market.price": "Giá",
   "market.currency_of_quote": "Loại tiền của giá",
   "market.close_date": "Ngày giá",
   "market.fetched_at": "Lấy lúc",
   "market.row_error": "Lỗi khi lấy giá",
+  "market.source_market": "Giá sàn",
+  "market.source_fund": "NAV quỹ",
+  "market.source_note":
+    "“Giá sàn” là giá đóng cửa của một chứng khoán niêm yết. “NAV quỹ” là giá trị tài sản ròng mỗi chứng chỉ quỹ, do công ty quản lý quỹ công bố mỗi ngày — quỹ mở không niêm yết nên không có giá sàn.",
   "market.rates": "Tỷ giá",
   "market.rates_note":
     "“feed” là tỷ giá thật lấy từ nguồn; “seed” là con số tạm dùng khi chưa có mạng.",

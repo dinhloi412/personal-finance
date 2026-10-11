@@ -26,6 +26,13 @@ DEMO_ASSETS = [
     ("VIC.VN", "stock", "Vingroup JSC", 2_000, 130_000_000.0, "VND"),
     ("FPT.VN", "stock", "FPT Corporation", 500, 45_000_000.0, "VND"),
     ("VOO", "fund", "Vanguard S&P 500 ETF", 12, 6_500.0, "USD"),
+    # Two Vietnamese OPEN-ENDED funds, priced by NAV rather than by a market
+    # close. Included because they are the one kind of holding Yahoo cannot
+    # price, and a demo that only showed listed things would not show that the
+    # app can handle them at all. `DCDE` is the name on the certificate and
+    # Fmarket calls the same fund `VFMVF4`.
+    ("VNDAF", "fund", "VNDAF", 5_000, 90_000_000.0, "VND"),
+    ("DCDE", "fund", "Quỹ cổ phiếu tập trung cổ tức DC", 3_000, 75_000_000.0, "VND"),
     ("BTC-USD", "crypto", "Bitcoin", 0.15, 6_000.0, "USD"),
 ]
 

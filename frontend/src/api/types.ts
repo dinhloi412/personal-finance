@@ -243,6 +243,10 @@ export interface SearchResult {
   degraded: boolean;
 }
 
+/** Where a price came from. A market close and a fund's NAV are not the same
+ * kind of fact, so the interface says which one it is showing. */
+export type PriceSource = "market" | "fund" | string;
+
 export interface PriceRow {
   symbol: string;
   price: number;
@@ -250,6 +254,7 @@ export interface PriceRow {
   as_of: string;
   fetched_at: string;
   error: string | null;
+  source: PriceSource;
 }
 
 export interface FxRow {

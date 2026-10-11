@@ -86,11 +86,30 @@ class TestTheDemoPortfolio:
         assert len(demand) == 1, "one deposit should have no end date"
 
     def test_it_prices_what_it_can(self, db):
-        """Through the fake market, so this asserts the wiring rather than
-        Yahoo being up."""
+        """Through the fake feeds, so this asserts the wiring rather than
+        either source being up."""
         seed.seed()
         from app import models
 
         priced = {row.symbol for row in db.query(models.PriceCache).all()}
         symbols = {row.symbol for row in db.query(models.Asset).all()}
         assert symbols <= priced
+
+    def test_it_includes_an_open_ended_fund(self, db):
+        """The one kind of holding no market feed can price, so the demo shows
+        that the app handles it — and shows it as a NAV, not as a close."""
+        seed.seed()
+        from app import models, pricing
+
+        row = db.get(models.PriceCache, "VNDAF")
+        assert row is not None, "the demo has no open-ended fund"
+        assert row.source == pricing.SOURCE_FUND
+        assert row.currency == "VND"
+
+    def test_it_includes_the_aliased_fund(self, db):
+        """`DCDE` is the code on the certificate for the fund the fund platform
+        publishes as `VFMVF4`; the demo holds it under the name a person has."""
+        seed.seed()
+        from app import models
+
+        assert db.get(models.PriceCache, "DCDE") is not None

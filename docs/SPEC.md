@@ -15,6 +15,7 @@ to one job: **keep track of what you own and what it is worth.**
 | 1 | Track **5 asset kinds**: `stock`, `fund` (ETF / mutual fund), `crypto`, `cash`, `deposit` (term savings) |
 | 2 | Market assets (`stock`, `fund`, `crypto`) priced automatically from Yahoo Finance |
 | 3 | `cash` is a **manual balance** the user edits by hand when it moves |
+| 2b | Open-ended Vietnamese funds (quỹ mở) priced by **NAV from Fmarket**, the kind of fund Yahoo cannot price |
 | 3b | `deposit` is a **term deposit**: a principal, a rate and a term, whose interest is **computed** day by day |
 | 4 | **2 currencies**: `VND`, `USD` — one is the *base* for all totals |
 | 5 | **2 languages**: `vi` (Tiếng Việt), `en` (English) |
@@ -144,8 +145,24 @@ disposable).
 
 ## 4. Pricing
 
-- Source: `yfinance` (Yahoo Finance). The most recent **close** from a short
-  history window is used; Yahoo's realtime quote endpoint is unreliable.
+Two sources, because there are two kinds of thing to price and they are priced
+by different facts:
+
+| kind | source | the number | published |
+|---|---|---|---|
+| listed (`stock`, `fund` ETF, `crypto`) | Yahoo Finance | last **close** of a session | per session |
+| open-ended `fund` | Fmarket | **NAV** per certificate | once a day |
+
+The order is: the source that priced the symbol last time, then the other one,
+then a recorded failure. A fund certificate is not listed, so Yahoo will never
+price it; a stock has no NAV, so Fmarket never will. Every stored quote carries
+`source` (`market` or `fund`) and the interface shows which — a NAV and a close
+are not the same kind of fact and must not be displayed as though they were.
+
+### 4.1 Yahoo Finance (listed things)
+
+- The most recent **close** from a short history window is used; Yahoo's
+  realtime quote endpoint is unreliable.
 - Symbol conventions: `AAPL` (US), `VIC.VN` (HOSE), `VWCE.DE` (Xetra),
   `BTC-USD` / `BTC-EUR` (crypto pairs), `EUNL.DE` (ETF).
 - Quotes are cached in `PriceCache` with `as_of` (the close date) and
@@ -156,6 +173,29 @@ disposable).
 - If the quote's currency is neither VND nor USD, the position is reported but
   **not converted**, with an explicit "unsupported currency" flag — the same
   honesty rule as an unknown FX rate.
+
+### 4.2 Fmarket (open-ended funds)
+
+An open-ended fund has no ticker and no session: it has a NAV, published once a
+day by the fund's management company. The source is
+<https://fmarket.vn>'s public JSON API — no key, structured, and it carries the
+day the NAV belongs to. Dragon Capital publishes the same numbers on its own
+site, but as an HTML table, and a scraper for a page nobody promised to keep is
+a maintenance cost this does not need to pay.
+
+**One fund, several names.** Fmarket uses the fund company's internal code for
+Dragon Capital's funds; the certificate and the fund's own website use another.
+Both are correct: `DCDE` and `VFMVF4` are the same fund, and their NAVs matched
+to the dong when cross-checked against Dragon Capital's published price list.
+`backend/app/funds.py::ALIASES` maps one to the other, and a test fails if a
+mapped code stops resolving.
+
+- **NAV is a daily figure**, so one request per fund per day is the entire
+  budget. A chosen fund is priced from its own endpoint; the catalogue of funds
+  is fetched at most once per six hours, and only when someone is searching.
+- **There is no NAV history endpoint.** A fund's value is always current NAV;
+  a dated valuation of a fund cannot be reconstructed from this source, which
+  the price cache's `as_of` makes visible rather than silent.
 
 ---
 

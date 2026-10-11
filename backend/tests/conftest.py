@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # schema.
 os.environ["DATABASE_URL"] = "sqlite://"
 
-from app import fx, market, models, pricing  # noqa: E402
+from app import funds, fx, market, models, pricing  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -53,6 +53,68 @@ QUOTES: dict[str, tuple[float, str]] = {
     "BTC-USD": (50_000.0, "USD"),
     "VWCE.DE": (100.0, "EUR"),
 }
+
+#: The numbers the real Fmarket answered with, on 2026-10-11. One fund is
+#: listed there under a different name than the one a person types, which is
+#: why the alias table exists — `DCDE` is Dragon Capital's name for `VFMVF4`,
+#: and both NAVs were cross-checked against the fund company's own price list.
+FUNDS: dict[str, tuple[int, float, str, str]] = {
+    # product code  (id,         nav,        name,                            nav date)
+    "VNDAF": (38, 18_049.76, "QUỸ ĐẦU TƯ CHỦ ĐỘNG VND", "2026-10-09"),
+    "VFMVF4": (40, 24_582.29, "QUỸ ĐẦU TƯ CỔ PHIẾU TẬP TRUNG CỔ TỨC DC", "2026-10-08"),
+    "VFMVF1": (41, 93_099.64, "QUỸ ĐẦU TƯ CHỨNG KHOÁN NĂNG ĐỘNG DC", "2026-10-08"),
+}
+
+
+def fake_fund(symbol: str) -> funds.FundQuote:
+    """A fund from `FUNDS`, resolved through the alias table like the real one."""
+    cleaned = funds.normalise(symbol)
+    code = funds.resolve_product_code(cleaned)
+    if code not in FUNDS:
+        raise funds.FundError(f"Fmarket does not carry {cleaned}")
+    product_id, nav, name, as_of = FUNDS[code]
+    return funds.FundQuote(
+        symbol=cleaned,
+        product_code=code,
+        name=name,
+        nav=nav,
+        currency="VND",
+        as_of=as_of,
+        owner="IPA PARTNER" if code == "VNDAF" else "DCVFM",
+        product_id=product_id,
+    )
+
+
+def _epoch_ms(day: str) -> int:
+    """A date as Fmarket's millisecond timestamp."""
+    import datetime
+
+    parsed = datetime.datetime.fromisoformat(day).replace(tzinfo=datetime.timezone.utc)
+    return int(parsed.timestamp() * 1000)
+
+
+def fake_fund_catalogue() -> list[dict]:
+    """Raw Fmarket-shaped rows, for the catalogue path."""
+    return [
+        {
+            "id": _id,
+            "code": code,
+            "name": name,
+            "shortName": code,
+            "nav": nav,
+            "lastYearNav": nav,
+            "fundType": {"id": 1, "name": "Quỹ mở"},
+            "dataFundAssetType": {"id": 1, "code": "STOCK", "name": "Quỹ cổ phiếu"},
+            "owner": {"shortName": "IPA PARTNER" if code == "VNDAF" else "DCVFM"},
+            "extra": {
+                "lastNAVDate": _epoch_ms(as_of),
+                "currentNAV": nav,
+                "lastNAV": nav,
+            },
+        }
+        for code, (_id, nav, name, as_of) in FUNDS.items()
+    ]
+
 
 #: What the fake feed publishes: units of each currency per 1 USD.
 #:
@@ -132,7 +194,18 @@ def no_network(monkeypatch):
     monkeypatch.setattr(market, "quote", fake_quote)
     monkeypatch.setattr(market, "_fetch_search", fake_search)
     monkeypatch.setattr(fx, "_fetch_rates", fake_feed)
+    monkeypatch.setattr(funds, "_fetch_catalogue", fake_fund_catalogue)
+    # By numeric id, which is what the real endpoint takes.
+    monkeypatch.setattr(
+        funds,
+        "_fetch_product",
+        lambda product_id: next(
+            (row for row in fake_fund_catalogue() if row["id"] == product_id), {}
+        ),
+    )
+    funds.forget_catalogue()
     yield
+    funds.forget_catalogue()
 
 
 @pytest.fixture

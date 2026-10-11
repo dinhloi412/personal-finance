@@ -227,6 +227,9 @@ export interface Dict {
   "market.close_date": string;
   "market.fetched_at": string;
   "market.row_error": string;
+  "market.source_market": string;
+  "market.source_fund": string;
+  "market.source_note": string;
   "market.rates": string;
   "market.rates_note": string;
   "market.base": string;

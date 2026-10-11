@@ -238,13 +238,17 @@ export const en: Dict = {
   // -- market ---------------------------------------------------------------
   "market.prices": "Stored prices",
   "market.prices_note":
-    "“Price date” is the session the number belongs to; “fetched” is when the source was last asked. An old price is still usable — as long as you can see that it is old.",
+    "“Price date” is the day the number belongs to — the trading session for a listed security, or the NAV date for an open-ended fund; “fetched” is when the source was last asked. An old price is still usable — as long as you can see that it is old.",
   "market.symbol": "Symbol",
   "market.price": "Price",
   "market.currency_of_quote": "Quote currency",
   "market.close_date": "Price date",
   "market.fetched_at": "Fetched",
   "market.row_error": "Price fetch failed",
+  "market.source_market": "Market close",
+  "market.source_fund": "Fund NAV",
+  "market.source_note":
+    "“Market close” is the closing price of a listed security. “Fund NAV” is net asset value per certificate, published daily by the fund's management company — an open-ended fund is not listed, so it has no closing price.",
   "market.rates": "Exchange rates",
   "market.rates_note":
     "“feed” is a published rate; “seed” is the built-in placeholder used when the feed has never answered.",

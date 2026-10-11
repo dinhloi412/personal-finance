@@ -180,6 +180,7 @@ export function Market() {
                 <Th align="right">{t("market.price")}</Th>
                 <Th>{t("market.currency_of_quote")}</Th>
                 <Th>{t("market.close_date")}</Th>
+                <Th>{t("market.source")}</Th>
                 <Th>{t("market.fetched_at")}</Th>
                 <Th>{t("market.row_error")}</Th>
               </>
@@ -195,6 +196,18 @@ export function Market() {
                 </Td>
                 <Td>{row.currency ?? t("state.unknown")}</Td>
                 <Td>{formatDate(row.as_of, lang)}</Td>
+                <Td>
+                  {/* Named, not implied: a NAV and a closing price arrive on
+                      the same table from two different feeds, and the date
+                      beside each means something different in each case. */}
+                  <span title={t("market.source_note")}>
+                    <Badge tone={row.source === "fund" ? "info" : "neutral"}>
+                      {row.source === "fund"
+                        ? t("market.source_fund")
+                        : t("market.source_market")}
+                    </Badge>
+                  </span>
+                </Td>
                 <Td>{formatDateTime(row.fetched_at, lang)}</Td>
                 <Td>
                   {row.error && (

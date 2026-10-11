@@ -178,6 +178,7 @@ models and could never have caught this.
 | M9 cursors | done | one rule in `index.css`, a test that reads it, and a CDP probe of every page as proof |
 | M10 dialogs | done | the overlay wrapper measured in a browser across all four dialogs; `pnpm test` now 22 |
 | M11 dropdowns | done | every select draws its own chevron with room on both sides; measured on all four pages and in the dialogs |
+| M12 open-ended funds | done | `app/funds.py` + `tests/test_funds.py` (34), and the two funds the user actually holds priced from the live Fmarket |
 
 The screenshot pass found six more, all fixed: the allocation donut measured
 zero height inside a grid cell and never drew; a one-point history chart drew an
@@ -249,6 +250,51 @@ every page and reading the result:
   A browser check (CDP, every control on every page) is what settled it: a
   screenshot cannot show a cursor.
 
+## M12 — Open-ended funds (the second price source)
+
+Asked for because the two funds the user holds — `VNDAF` and `DCDE` — could not
+be found at all. They are not missing from the app: they are missing from Yahoo,
+and for a reason worth stating once.
+
+**A fund certificate is not a listing.** An open-ended fund has no ticker and no
+session close; what it has is a NAV, published once a day by its management
+company. So this is not a gap in the search, it is a second kind of price, and
+it gets a second source rather than a workaround.
+
+Where it went, and why:
+
+- **`app/funds.py`** — Fmarket's public JSON API. Chosen over Dragon Capital's
+  own site because that site publishes the same numbers as an HTML table, and a
+  scraper for a page nobody promised to keep is a cost this does not need to
+  pay. Fmarket answers with `nav` and `lastNAVDate`: the number and the day it
+  is for.
+- **`pricing._sources_for`** — the order is "the source that priced it last
+  time, then the other one". A fund does not become listed and a stock does not
+  start publishing a NAV, so trying the wrong source first costs a request on
+  every refresh and, worse, a delay.
+- **`price_cache.source`** — which feed answered, so the next refresh knows
+  where to start and the interface can say whether a number is a close or a
+  NAV. They are not the same kind of fact.
+- **The alias table.** Fmarket uses the fund company's internal code for Dragon
+  Capital's funds; the certificate uses another. `DCDE` is `VFMVF4`. Both work,
+  and the picker shows both names so one fund cannot be mistaken for two. The
+  mapping is four rows and a test, not a heuristic: the NAVs were cross-checked
+  against Dragon Capital's own published price list and matched to the dong.
+
+Two things the API does that shaped the code, both found by trying it rather
+than reading about it:
+
+1. **`/products/{id}` takes a numeric id, not a code.** Asking for
+   `/products/VNDAF` answers `400` before any lookup, and the error says only
+   "HTTP Error 400" — which is what a wrong-shaped request looks like from a
+   distance. The code now resolves the code to its id through the catalogue,
+   which is fetched once and remembered for six hours.
+2. **There is no NAV history endpoint.** Eight shapes of URL were tried; the
+   series is not public. So a fund's value is always current NAV, and a dated
+   valuation of a fund cannot be reconstructed from this source. The price
+   cache says which day each NAV is for, which is what keeps that honest rather
+   than silent.
+
 ## Risk register
 
 | Risk | Mitigation |
@@ -263,6 +309,7 @@ every page and reading the result:
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| A fund that silently looks unpriced | A second source for NAVs, an alias table for the one fund with two names, and a `source` column so a NAV is never shown as a close |
 | An interface that looks inert | One cursor rule over the interactive elements, asserted by `tests/cursor.test.ts` and checked in a browser with CDP |
 | A dialog sized by its content instead of its own `max-w-*` | The overlay wrapper is `w-full` and places its panel; asserted by test and measured with CDP across all four dialogs |
 | An existing database missing a new column | `add_missing_columns()` at startup, tested against a deliberately old-shape database |

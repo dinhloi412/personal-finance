@@ -54,9 +54,13 @@ convention.
 against a recorded history, with anything that could not be converted listed
 rather than quietly dropped.
 
-**Holdings** — stocks, funds and crypto, priced automatically from Yahoo
-Finance. A position carries a quantity and, optionally, what it cost; leave the
-cost blank and gain is reported as unknown rather than invented.
+**Holdings** — stocks, funds and crypto, priced automatically. Listed things
+come from Yahoo Finance; a Vietnamese **open-ended fund** (quỹ mở) has no
+ticker and no session close, so its price is the **NAV published by Fmarket**,
+once a day. The Market page says which of the two each number came from,
+because they are not the same kind of fact. A position carries a quantity and,
+optionally, what it cost; leave the cost blank and gain is reported as unknown
+rather than invented.
 
 **Cash** — a name, a currency, a balance. When the money moves you edit the
 number in place, in one action, and the date it was written down is stamped
@@ -105,10 +109,24 @@ Three rules, each of which is enforced in code and covered by tests:
 
 ## Supported symbols
 
-Yahoo Finance tickers: `AAPL` (US), `VIC.VN` and `FPT.VN` (HOSE), `VWCE.DE`
-(Xetra), `BTC-USD` and `BTC-EUR` (crypto pairs), `VOO` (US ETF). Type a name to
-search, or type the symbol directly — the search is a convenience, never a
-gate.
+**Listed** (Yahoo Finance tickers): `AAPL` (US), `VIC.VN` and `FPT.VN` (HOSE),
+`VWCE.DE` (Xetra), `BTC-USD` and `BTC-EUR` (crypto pairs), `VOO` (US ETF).
+
+**Open-ended Vietnamese funds** (Fmarket NAV): `VNDAF`, `VESAF`, `VFF`, `VEOF`,
+`DCDE`, `DCDS`, `DCBF`, `DCIP` and about sixty more. A few of Dragon Capital's
+funds are published by Fmarket under the fund company's internal code while the
+certificate uses another — `DCDE` is `VFMVF4`, `DCDS` is `VFMVF1` — and both
+names work: `backend/app/funds.py::ALIASES` maps between them, and the picker
+shows the platform's code beside the name so the same fund is not mistaken for
+two.
+
+Type a name to search, or type the code directly — the search is a convenience,
+never a gate.
+
+**Why a fund is not a stock.** A fund certificate is not listed on an exchange,
+so there is no ticker and no closing price: what it has is a NAV, published once
+a day by the fund's management company. That is why the table on the Market page
+has a "source" column.
 
 **Why an ETF listed in EUR shows as "cannot convert".** This app holds two
 currencies. A quote in a third is reported, with its price and its date, but it

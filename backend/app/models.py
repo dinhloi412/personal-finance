@@ -194,6 +194,13 @@ class PriceCache(Base):
     as_of: Mapped[str] = mapped_column(String, nullable=False)  # market close date
     fetched_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Which feed priced it: "market" for a listed price, "fund" for a NAV.
+    #: Kept so the next refresh asks the right one first, and so the interface
+    #: can say where a number came from — a NAV and a market close are not the
+    #: same kind of fact and should not be shown as though they were.
+    source: Mapped[str] = mapped_column(
+        String, nullable=False, default="market", server_default="market"
+    )
 
 
 class FxRate(Base):

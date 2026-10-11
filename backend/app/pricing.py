@@ -1,6 +1,15 @@
 """Refreshing: asking the feeds, storing what they say, and reporting what
 happened per symbol.
 
+**Two feeds, one question.** "What is this worth" has two answers in this app:
+a market price for anything listed (Yahoo) and a NAV for an open-ended fund
+(Fmarket). A fund certificate is not listed, so Yahoo will never price it — and
+conversely, asking Fmarket about `AAPL` wastes a request on a definite no. The
+order is therefore: try the source the symbol was priced from last time, then
+the other one, then record the failure. That last part matters more than the
+order: a symbol nobody can price must end up with its failure written against
+it, not with a stale number silently reused as though it were today's.
+
 A refresh is not a transaction. One unreachable listing must not roll back the
 nineteen that answered, and one bad ticker must not turn into a 500. So this
 module loops, catches per item, writes what it got, and returns a report the
@@ -15,13 +24,52 @@ a blank cell — and the failure is recorded on the row so the UI can mark it.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import fx, market, models
+from app import funds, fx, market, models
 
 logger = logging.getLogger(__name__)
+
+
+#: Which feed priced a symbol, stored on its cache row. A short word rather
+#: than a module path, because it is written into the database and read by a
+#: human debugging a portfolio.
+SOURCE_MARKET = "market"
+SOURCE_FUND = "fund"
+
+
+@dataclass(frozen=True)
+class Priced:
+    """What a cache row needs, from either feed.
+
+    `market.Quote` says `price` and `funds.FundQuote` says `nav`, because a
+    close and a net asset value are different facts with different names. This
+    is where that difference stops: one store, one shape, no attribute that
+    exists on only one of them.
+    """
+
+    symbol: str
+    price: float
+    currency: str | None
+    as_of: str
+    name: str | None = None
+
+
+def _as_priced(quote) -> Priced:
+    """Normalise either feed's quote into the shape the store writes."""
+    price = getattr(quote, "price", None)
+    if price is None:
+        price = getattr(quote, "nav")
+    return Priced(
+        symbol=quote.symbol,
+        price=float(price),
+        currency=quote.currency,
+        as_of=quote.as_of,
+        name=getattr(quote, "name", None),
+    )
 
 
 def refresh_prices(session: Session, symbols: list[str] | None = None) -> dict:
@@ -42,20 +90,25 @@ def refresh_prices(session: Session, symbols: list[str] | None = None) -> dict:
     failed: list[dict] = []
 
     for symbol in seen:
-        try:
-            priced = market.quote(symbol)
-        except market.MarketError as cause:
-            _record_failure(session, symbol, str(cause))
-            failed.append({"symbol": symbol, "error": str(cause)})
-            continue
-        except Exception as cause:  # noqa: BLE001 — a refresh never raises out
-            logger.exception("unexpected failure pricing %s", symbol)
-            _record_failure(session, symbol, str(cause))
-            failed.append({"symbol": symbol, "error": str(cause)})
-            continue
+        errors: list[str] = []
 
-        _store(session, priced)
-        refreshed.append(symbol)
+        for source, fetch in _sources_for(session, symbol):
+            try:
+                quote = fetch()
+            except Exception as cause:  # noqa: BLE001 — a refresh never raises out
+                errors.append(f"{source}: {cause}")
+                continue
+
+            store_quote(session, _as_priced(quote), source=source)
+            refreshed.append(symbol)
+            break
+        else:
+            # No source could price it. The failure is recorded against the
+            # symbol so the interface can say which one, and any older price
+            # stays where it is — dated, and therefore honest.
+            message = "; ".join(errors) or "no source could price it"
+            _record_failure(session, symbol, message)
+            failed.append({"symbol": symbol, "error": message})
 
     session.commit()
     return {
@@ -74,26 +127,48 @@ def _held_symbols(session: Session) -> list[str]:
     return [*held, *cached]
 
 
-def _store(session: Session, priced: market.Quote) -> None:
-    """Write a quote over the previous one for the same symbol."""
-    row = session.get(models.PriceCache, priced.symbol)
+def _sources_for(session: Session, symbol: str):
+    """The feeds to try for `symbol`, most likely first.
+
+    A symbol already priced by one source is tried there first, because the
+    answer is known: a fund will not start being listed, and a stock will not
+    start publishing a NAV. Trying the wrong one first costs a request and,
+    worse, a delay on every refresh.
+    """
+    market_source = (SOURCE_MARKET, lambda: market.quote(symbol))
+    fund_source = (SOURCE_FUND, lambda: funds.quote(symbol))
+
+    row = session.get(models.PriceCache, symbol)
+    if row is not None and row.source == SOURCE_FUND:
+        return [fund_source, market_source]
+    return [market_source, fund_source]
+
+
+def store_quote(session: Session, quote, *, source: str) -> None:
+    """Write a quote over the previous one for the same symbol.
+
+    Both quote types carry the same four things — symbol, price, currency, the
+    day the number is for — which is what makes one store enough for two feeds.
+    """
+    row = session.get(models.PriceCache, quote.symbol)
     if row is None:
         row = models.PriceCache(
-            symbol=priced.symbol,
-            price=priced.price,
-            currency=priced.currency,
-            as_of=priced.as_of,
+            symbol=quote.symbol,
+            price=quote.price,
+            currency=quote.currency,
+            as_of=quote.as_of,
         )
         session.add(row)
     else:
-        row.price = priced.price
+        row.price = quote.price
         # A quote that arrives without a currency does not erase one we already
-        # learned: the listing currency of a symbol does not change.
-        row.currency = priced.currency or row.currency
-        row.as_of = priced.as_of
+        # learned: the currency of a symbol does not change.
+        row.currency = quote.currency or row.currency
+        row.as_of = quote.as_of
         row.fetched_at = models.utcnow_iso()
+    row.source = source
     row.error = None
-    _learn_instrument(session, priced)
+    _learn_instrument(session, quote, source=source)
 
 
 def _record_failure(session: Session, symbol: str, error: str) -> None:
@@ -104,29 +179,33 @@ def _record_failure(session: Session, symbol: str, error: str) -> None:
         row.fetched_at = models.utcnow_iso()
 
 
-def _learn_instrument(session: Session, priced: market.Quote) -> None:
-    """Remember the listing currency behind a symbol, once we know it.
+def _learn_instrument(session: Session, quote, *, source: str = SOURCE_MARKET) -> None:
+    """Remember the name and currency behind a symbol, once we know them.
 
-    The registry is filled from the quote rather than from the user's form so
-    that the currency a position is *valued* in comes from the exchange, not
-    from a dropdown someone could get wrong.
+    Filled from the quote rather than from the user's form so that the currency
+    a position is *valued* in comes from the source, not from a dropdown
+    someone could get wrong. A fund's name is worth overwriting with its full
+    one: `VNDAF` becomes "QUỸ ĐẦU TƯ CHỦ ĐỘNG VND", which is what the
+    certificate says.
     """
-    if not priced.currency:
+    if not quote.currency:
         return
-    row = session.get(models.Instrument, priced.symbol)
+    kind = "fund" if source == SOURCE_FUND else (market.kind_for_quote_symbol(quote.symbol) or "stock")
+    row = session.get(models.Instrument, quote.symbol)
     if row is None:
         row = models.Instrument(
-            symbol=priced.symbol,
-            name=priced.name or priced.symbol,
-            kind=market.kind_for_quote_symbol(priced.symbol) or "stock",
-            currency=priced.currency,
+            symbol=quote.symbol,
+            name=quote.name or quote.symbol,
+            kind=kind,
+            currency=quote.currency,
         )
         session.add(row)
     else:
-        if priced.currency:
-            row.currency = priced.currency
-        if priced.name:
-            row.name = priced.name
+        if quote.currency:
+            row.currency = quote.currency
+        if quote.name:
+            row.name = quote.name
+        row.kind = kind
     row.updated_at = models.utcnow_iso()
 
 
