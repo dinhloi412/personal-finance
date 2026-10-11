@@ -123,3 +123,38 @@ test("the overlay wrapper fills the backdrop and places its panel", () => {
     "the overlay still has to close on a click outside the panel",
   );
 });
+
+/**
+ * The dropdown's arrow has room around it.
+ *
+ * A native select draws its arrow hard against the right edge whatever padding
+ * the element has, so a control whose text starts 12px from the left ended with
+ * its arrow touching the border on the right. The fix is `appearance: none`,
+ * a padding-right wide enough for a drawn chevron, and the chevron itself —
+ * and forgetting any one of the three puts the native arrow back, which is a
+ * visual regression no type can catch.
+ */
+test("a dropdown draws its own chevron instead of the browser's", () => {
+  const ui = readFileSync("src/components/ui.tsx", "utf8");
+  const start = ui.indexOf("export function Select(");
+  const end = ui.indexOf("export function Textarea(", start);
+  assert.ok(start > 0 && end > start, "Select not found in ui.tsx");
+  const select = ui.slice(start, end);
+
+  assert.ok(
+    select.includes("appearance-none"),
+    "without appearance-none the browser draws its own arrow against the border",
+  );
+  assert.ok(
+    /pr-10/.test(select),
+    "the select needs padding-right wide enough for the chevron to sit inside it",
+  );
+  assert.ok(
+    /absolute right-3\.5/.test(select),
+    "the chevron must be positioned with a margin from the right edge",
+  );
+  assert.ok(
+    select.includes("pointer-events-none"),
+    "the chevron overlays the select, so clicks must pass through it",
+  );
+});

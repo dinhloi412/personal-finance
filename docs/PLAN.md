@@ -177,6 +177,7 @@ models and could never have caught this.
 | M8 UI pass | done | every page screenshotted and read at 1440 and (via CDP) 390; `pnpm test` now 21 |
 | M9 cursors | done | one rule in `index.css`, a test that reads it, and a CDP probe of every page as proof |
 | M10 dialogs | done | the overlay wrapper measured in a browser across all four dialogs; `pnpm test` now 22 |
+| M11 dropdowns | done | every select draws its own chevron with room on both sides; measured on all four pages and in the dialogs |
 
 The screenshot pass found six more, all fixed: the allocation donut measured
 zero height inside a grid cell and never drew; a one-point history chart drew an
@@ -226,6 +227,11 @@ every page and reading the result:
   percentages exposed it immediately: the frontend's kind list is its own
   constant, so a new kind has to be added in two places, and the second one
   was forgotten. Worth knowing: the API had been returning it all along.
+- **Every dropdown's arrow touched its right border.** `appearance: none` plus a
+  drawn chevron, because a native arrow cannot be positioned: every browser
+  puts it hard against the edge whatever padding the control has, so text 12px
+  from the left ended with an arrow 0px from the right. Four pages and two
+  dialogs measured afterwards: 40px of padding, the chevron 14px inside.
 - **Every dialog was a third of the width it asked for.** The overlay wrapped
   its panel in a bare `<div>`, and a flex item is sized by its content: the cash
   form measured 229px, so the panel's `w-full max-w-lg` was resolved against a

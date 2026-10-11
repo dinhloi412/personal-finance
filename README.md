@@ -38,7 +38,7 @@ relative paths and there is no CORS surface in either mode.
 
 ```bash
 cd backend  && uv run pytest      # 170 tests, no network access
-cd frontend && pnpm test          # 22 tests: formatters, dictionaries, layout
+cd frontend && pnpm test          # 23 tests: formatters, dictionaries, layout
 
 # and, against a running server with the real network:
 ./scripts/acceptance.sh           # the acceptance criteria from docs/SPEC.md §9

@@ -300,6 +300,15 @@ export function NumberInput({
   );
 }
 
+/**
+ * A dropdown with a chevron that sits where it is put.
+ *
+ * The native arrow cannot be positioned: every browser draws it hard against
+ * the control's right edge, whatever padding the control has, so a select whose
+ * text starts 12px from the left ends with its arrow touching the border on the
+ * right. `appearance: none` removes it and the chevron below is drawn instead,
+ * with room on both sides — which is the only way to make the two ends match.
+ */
 export function Select({
   label,
   hint,
@@ -316,9 +325,27 @@ export function Select({
   const id = rest.id ?? generated;
   return (
     <FieldShell id={id} label={label} hint={hint} error={error}>
-      <select {...rest} id={id} className={`${CONTROL} ${className}`}>
-        {children}
-      </select>
+      <div className="relative">
+        <select
+          {...rest}
+          id={id}
+          className={`${CONTROL} cursor-pointer appearance-none pr-10 ${className}`}
+        >
+          {children}
+        </select>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+        >
+          <path d="M5.5 8l4.5 4.5L14.5 8" />
+        </svg>
+      </div>
     </FieldShell>
   );
 }
