@@ -174,7 +174,8 @@ models and could never have caught this.
 | M6 tests, demo, run script | done | **170 backend tests pass**, `app/seed.py`, `start.sh` |
 | M6b term deposits | done | `tests/test_deposits.py` (23), `test_api.py::TestDeposits` (20), `tests/test_schema_upgrade.py` (5) |
 | M7 verify | done | live run against Yahoo + the FX feed on port 8010; `scripts/acceptance.sh` green, 11 sections |
-| M8 UI pass | done | every page screenshotted and read at 1440 and (via CDP) 390; `pnpm test` now 17 |
+| M8 UI pass | done | every page screenshotted and read at 1440 and (via CDP) 390; `pnpm test` now 21 |
+| M9 cursors | done | one rule in `index.css`, a test that reads it, and a CDP probe of every page as proof |
 
 The screenshot pass found six more, all fixed: the allocation donut measured
 zero height inside a grid cell and never drew; a one-point history chart drew an
@@ -224,6 +225,12 @@ every page and reading the result:
   percentages exposed it immediately: the frontend's kind list is its own
   constant, so a new kind has to be added in two places, and the second one
   was forgotten. Worth knowing: the API had been returning it all along.
+- **Nothing showed a pointer.** Tailwind v4 sets `cursor: default` on buttons,
+  so every control in the app looked inert. Fixed with one rule, and the first
+  version of that rule still missed the labels tied to a control by `for` — the
+  Holdings filter read "arrow" over the word and "hand" over the box under it.
+  A browser check (CDP, every control on every page) is what settled it: a
+  screenshot cannot show a cursor.
 
 ## Risk register
 
@@ -239,6 +246,7 @@ every page and reading the result:
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| An interface that looks inert | One cursor rule over the interactive elements, asserted by `tests/cursor.test.ts` and checked in a browser with CDP |
 | An existing database missing a new column | `add_missing_columns()` at startup, tested against a deliberately old-shape database |
 | Compounding a deposit the way the bank does not | Simple interest on actual days over 365, asserted against hand-checkable figures |
 | Counting withdrawn money twice | Withdrawal closes the deposit and writes the cash in one request, and a test asserts the total is unchanged |

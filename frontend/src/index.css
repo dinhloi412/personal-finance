@@ -25,6 +25,43 @@ body {
   background-color: #f8fafc;
 }
 
+/* Anything you can press shows it.
+ *
+ * Tailwind v4's preflight sets `cursor: default` on buttons — the browser
+ * default, and a change from v3 — so every control in the app was showing an
+ * arrow: nothing said "this is clickable", which is the cue a hover state
+ * alone does not give on a table of numbers.
+ *
+ * One rule over the interactive elements, rather than `cursor-pointer`
+ * sprinkled through the components, because the one that gets forgotten is the
+ * one that matters: a new button, a new row action, a label that owns a
+ * checkbox. A disabled control is the exception — it is not clickable, so it
+ * says so.
+ *
+ * `label[for]` is included because a label that names a control is itself
+ * clickable: it focuses the field, opens the select, ticks the box. It was
+ * missing from the first version of this rule, which left the filter labels on
+ * the Holdings page showing an arrow while the selects under them showed a
+ * hand — the exact confusion the rule exists to remove. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+select:not(:disabled),
+summary,
+label[for],
+label:has(> input:not(:disabled)),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Figures line up column-wise everywhere: a table of money whose digits do not
    align is harder to read than one whose digits do. */
 .tabular-nums {
