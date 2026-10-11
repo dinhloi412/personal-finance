@@ -40,6 +40,10 @@ interface AppValue {
   loading: boolean;
   /** A human-readable message for the last failure, or null. */
   error: string | null;
+  /** What the last refresh did, per symbol. Null until one has run. */
+  lastRefresh: RefreshAll | null;
+  /** Forget the last refresh report, once it has been read. */
+  clearRefresh: () => void;
   baseCurrency: Currency;
   lang: Lang;
 
@@ -76,6 +80,7 @@ export function AppProvider({
   const [history, setHistory] = useState<History | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<RefreshAll | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,6 +111,11 @@ export function AppProvider({
   const refreshAll = useCallback(async () => {
     try {
       const report = await api.refreshAll();
+      // Kept rather than returned only: the button that starts a refresh lives
+      // in the header, which has nowhere to render a per-symbol failure, and a
+      // refresh that silently failed for one symbol is the kind of thing a
+      // price tracker must not do.
+      setLastRefresh(report);
       await load();
       return report;
     } catch (cause) {
@@ -113,6 +123,8 @@ export function AppProvider({
       throw cause;
     }
   }, [load]);
+
+  const clearRefresh = useCallback(() => setLastRefresh(null), []);
 
   const setBaseCurrency = useCallback(
     async (currency: Currency) => {
@@ -163,6 +175,8 @@ export function AppProvider({
       error,
       baseCurrency: settings?.base_currency ?? "VND",
       lang: settings?.language ?? "vi",
+      lastRefresh,
+      clearRefresh,
       refresh: load,
       refreshAll,
       setBaseCurrency,
@@ -175,6 +189,8 @@ export function AppProvider({
       history,
       loading,
       error,
+      lastRefresh,
+      clearRefresh,
       load,
       refreshAll,
       setBaseCurrency,

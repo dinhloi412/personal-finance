@@ -17,9 +17,10 @@ rules about what a *request* may say:
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app import money
 
@@ -212,6 +213,7 @@ class Unconverted(BaseModel):
 class PortfolioCounts(BaseModel):
     assets: int
     cash: int
+    deposits: int
     unconverted: int
 
 
@@ -220,11 +222,14 @@ class PortfolioOut(BaseModel):
     total: float
     market_value: float
     cash_value: float
+    #: Principal plus accrued interest across every term deposit.
+    deposit_value: float
     cost_base: float | None
     gain: float | None
     gain_pct: float | None
     assets: list[AssetOut]
     cash: list[CashOut]
+    deposits: list[DepositOut]
     by_kind: list[KindTotal]
     by_currency: list[CurrencyTotal]
     unconverted: list[Unconverted]
@@ -238,6 +243,7 @@ class ValuationPoint(BaseModel):
     total: float
     market_value: float
     cash_value: float
+    deposit_value: float = 0.0
     cost_value: float | None
     unconverted_count: int
 
@@ -336,3 +342,106 @@ class RefreshAllOut(BaseModel):
 class HealthOut(BaseModel):
     status: str
     version: str
+
+
+# --------------------------------------------------------------------------
+# Term deposits (savings)
+# --------------------------------------------------------------------------
+
+
+class DepositCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    currency: Currency
+    principal: float = Field(gt=0)
+    #: Percent per year, as the contract quotes it: 6.5 means 6.5%.
+    annual_rate: float = Field(ge=0, le=100)
+    start_date: date
+    #: Null is a demand deposit (không kỳ hạn): no end, keeps accruing.
+    maturity_date: date | None = None
+    interest_mode: Literal["at_maturity"] = "at_maturity"
+    note: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _maturity_is_after_the_start(self) -> "DepositCreate":
+        if self.maturity_date is not None and self.maturity_date < self.start_date:
+            raise ValueError("maturity_date cannot be before start_date")
+        return self
+
+
+class DepositUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    currency: Currency | None = None
+    principal: float | None = Field(default=None, gt=0)
+    annual_rate: float | None = Field(default=None, ge=0, le=100)
+    start_date: date | None = None
+    maturity_date: date | None = None
+    interest_mode: Literal["at_maturity"] | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class DepositOut(BaseModel):
+    """A deposit as computed for today, plus the same figures in the base.
+
+    `value_base` is null when the deposit's currency cannot be converted, and
+    `reason` says so; the deposit is then excluded from the portfolio total
+    rather than counted at face value in the wrong unit.
+    """
+
+    id: int
+    name: str
+    currency: Currency
+    principal: float
+    annual_rate: float
+    start_date: str
+    maturity_date: str | None
+    interest_mode: str
+    note: str | None
+
+    as_of: str
+    days_accrued: int
+    interest_accrued: float
+    value: float
+    matured: bool
+    days_remaining: int | None
+    value_at_maturity: float
+
+    value_base: float | None = None
+    interest_base: float | None = None
+    reason: str | None = None
+
+
+class DepositRollRequest(BaseModel):
+    """Roll a matured deposit into a new term.
+
+    Everything is optional: with nothing given, the same term repeats — same
+    bank, same rate, a new period of the same length — and the interest earned
+    becomes part of the new principal, which is what "tất toán và gửi lại" does
+    at a counter.
+    """
+
+    #: New principal. Defaults to the current value (principal + interest).
+    principal: float | None = Field(default=None, gt=0)
+    annual_rate: float | None = Field(default=None, ge=0, le=100)
+    #: New start date. Defaults to the day the old term matured.
+    start_date: date | None = None
+    #: New maturity. Defaults to the same number of days as the term just ended.
+    maturity_date: date | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class DepositWithdrawRequest(BaseModel):
+    """Matured money comes out: the deposit is closed and a cash row records it.
+
+    Both halves happen in one request on purpose. Doing it in two screens is
+    how a portfolio ends up holding the same million twice — once as a deposit
+    that was never closed and once as cash that arrived.
+    """
+
+    account_name: str | None = Field(default=None, max_length=120)
+    balance: float | None = Field(default=None, ge=0)
+
+
+class DepositWithdrawOut(BaseModel):
+    closed_deposit_id: int
+    cash: "CashOut"
+    amount: float

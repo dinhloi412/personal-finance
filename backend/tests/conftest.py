@@ -42,9 +42,14 @@ from app.database import Base, SessionLocal, engine  # noqa: E402
 #: symbol -> (close, listing currency). `VWCE.DE` is quoted in a currency this
 #: app deliberately cannot hold, which is how the "excluded, not guessed"
 #: behaviour is tested without inventing a second fake.
+#: The fake market quotes every symbol the demo portfolio holds, plus one in a
+#: currency this app cannot convert — which is how the "excluded, not guessed"
+#: path is tested without a second fake.
 QUOTES: dict[str, tuple[float, str]] = {
     "AAPL": (200.0, "USD"),
     "VIC.VN": (100_000.0, "VND"),
+    "FPT.VN": (60_000.0, "VND"),
+    "VOO": (700.0, "USD"),
     "BTC-USD": (50_000.0, "USD"),
     "VWCE.DE": (100.0, "EUR"),
 }

@@ -26,6 +26,7 @@ from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.money import DEFAULT_INTEREST_MODE
 
 
 def utcnow_iso() -> str:
@@ -129,6 +130,50 @@ class CashAccount(Base):
     updated_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
 
 
+class Deposit(Base):
+    """A term deposit: money lent to a bank for a fixed period at a fixed rate.
+
+    Not cash and not a market position, and stored separately for the same
+    reason cash is. It has no symbol and no quote — its value is *computed* from
+    its own terms — but unlike cash it is not a number the user re-types: the
+    principal is fixed at the start and the interest accrues by the day. Asking
+    someone to retype a figure the app can derive is asking them to be the
+    database.
+
+    What the user does have to supply is what no source knows:
+
+    - `principal` and `currency`: how much, in what.
+    - `annual_rate`: the percentage the contract quotes, per year.
+    - `start_date`: when the money left, and therefore when interest began.
+    - `maturity_date`: when the contract ends. Null is a demand deposit
+      (không kỳ hạn), which has no end and keeps accruing.
+
+    The one convention worth stating: interest accrues on ACTUAL days held over
+    365, and is not compounded before maturity. That is how a Vietnamese term
+    deposit pays, and modelling daily compounding instead would overstate the
+    figure the user is about to compare with their bank's.
+    """
+
+    __tablename__ = "deposits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    currency: Mapped[str] = mapped_column(String, nullable=False)  # Currency
+    principal: Mapped[float] = mapped_column(Float, nullable=False)
+    annual_rate: Mapped[float] = mapped_column(Float, nullable=False)  # percent/year
+    start_date: Mapped[str] = mapped_column(String, nullable=False)  # YYYY-MM-DD
+    #: Null for a demand deposit: no end, so interest never stops accruing.
+    maturity_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    interest_mode: Mapped[str] = mapped_column(
+        String, nullable=False, default=DEFAULT_INTEREST_MODE
+    )  # InterestMode
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+
+    __table_args__ = (Index("ix_deposits_maturity", "maturity_date"),)
+
+
 class PriceCache(Base):
     """The last quote seen for a symbol, and the close it is for.
 
@@ -193,6 +238,7 @@ class Valuation(Base):
     total: Mapped[float] = mapped_column(Float, nullable=False)
     market_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     cash_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    deposit_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # What the parts cost, in the same base, so the chart can show gain over
     # time without re-reading every position's cost basis as it is today.
     cost_value: Mapped[float | None] = mapped_column(Float, nullable=True)

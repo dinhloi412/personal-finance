@@ -14,6 +14,7 @@ to hand a first-time user.
 
 from __future__ import annotations
 
+import datetime
 import sys
 
 from app import models, pricing
@@ -34,11 +35,20 @@ DEMO_CASH = [
     ("Wise", "USD", 2_400.0),
 ]
 
+#: name, currency, principal, annual rate, term in days. The three are the
+#: three states a deposit can be in: running, just matured, and demand.
+DEMO_DEPOSITS = [
+    ("Vietcombank 12 tháng", "VND", 200_000_000.0, 5.2, 365, 95),
+    ("Techcombank 6 tháng", "VND", 100_000_000.0, 4.8, 181, 190),
+    ("Ví không kỳ hạn", "VND", 5_000_000.0, 0.5, None, 60),
+]
+
 
 def is_empty(session) -> bool:
     return (
         session.query(models.Asset).count() == 0
         and session.query(models.CashAccount).count() == 0
+        and session.query(models.Deposit).count() == 0
     )
 
 
@@ -66,6 +76,25 @@ def seed(*, force: bool = False) -> bool:
             session.add(
                 models.CashAccount(name=name, currency=currency, balance=balance)
             )
+
+        # A deposit's dates are relative to today, so the demo always shows one
+        # running, one just matured and one with no end — which is every state
+        # the Savings page can render.
+        today = datetime.date.today()
+        for name, currency, principal, rate, term, started_days_ago in DEMO_DEPOSITS:
+            start = today - datetime.timedelta(days=started_days_ago)
+            maturity = start + datetime.timedelta(days=term) if term else None
+            session.add(
+                models.Deposit(
+                    name=name,
+                    currency=currency,
+                    principal=principal,
+                    annual_rate=rate,
+                    start_date=start.isoformat(),
+                    maturity_date=maturity.isoformat() if maturity else None,
+                    interest_mode="at_maturity",
+                )
+            )
         session.commit()
 
         print("Fetching prices and rates for the demo portfolio...")
@@ -74,7 +103,10 @@ def seed(*, force: bool = False) -> bool:
             print(f"  could not price {failure['symbol']}: {failure['error']}")
         print(f"  priced: {', '.join(report['prices']['refreshed']) or 'nothing'}")
         print(f"  rates:  {'ok' if report['fx']['ok'] else report['fx']['error']}")
-        print(f"Demo portfolio written: {len(DEMO_ASSETS)} positions, {len(DEMO_CASH)} cash accounts.")
+        print(
+            f"Demo portfolio written: {len(DEMO_ASSETS)} positions, "
+            f"{len(DEMO_CASH)} cash accounts, {len(DEMO_DEPOSITS)} term deposits."
+        )
         return True
     finally:
         session.close()

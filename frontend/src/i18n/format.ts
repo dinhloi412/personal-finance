@@ -109,6 +109,27 @@ export function formatPercent(
 }
 
 /**
+ * A share of a total — an allocation, a weight — as an unsigned percentage.
+ *
+ * `formatPercent` is for a gain or a loss and prints a `+` on a positive
+ * number, which on a slice of a total would read as a movement rather than as a
+ * proportion. Those are different quantities with different rules, so they are
+ * different formatters rather than one with a flag.
+ */
+export function formatShare(
+  value: number | null | undefined,
+  lang: Lang,
+  decimals = 1,
+): string {
+  if (!known(value)) return DASH;
+  return new Intl.NumberFormat(LOCALES[lang], {
+    style: "percent",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value / 100);
+}
+
+/**
  * `YYYY-MM-DD` is parsed as a calendar date rather than a UTC instant, so a
  * date never shifts by a day for readers west of Greenwich — which is exactly
  * the bug that makes "31/12" read "1/1".
@@ -164,7 +185,13 @@ export function formatMonthDay(value: string, lang: Lang): string {
   }).format(date);
 }
 
-/** A bare rate, shown with enough precision to be useful. */
+/**
+ * A rate, shown with enough precision to be useful.
+ *
+ * Up to eight decimals, because a VND-per-USD rate inverted is 0.000038…: at
+ * six it prints as 0,000038 and two different days read as the same number.
+ * Eight is also short enough for a table cell.
+ */
 export function formatRate(
   value: number | null | undefined,
   lang: Lang,
@@ -172,6 +199,6 @@ export function formatRate(
   if (!known(value)) return DASH;
   return new Intl.NumberFormat(LOCALES[lang], {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: 8,
   }).format(value);
 }

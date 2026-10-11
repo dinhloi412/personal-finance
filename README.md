@@ -3,9 +3,10 @@
 A small, self-hosted tracker for **what you own and what it is worth**.
 
 Inspired by [aurelio-finance](https://github.com/LosaLosSantos/aurelio-finance),
-reduced to one job. Four things can be tracked — **stocks, funds, crypto, and
-cash** — in **VND and USD**, read in **Vietnamese or English**. That is the
-whole feature list; see [Scope](#scope) for what was deliberately left out.
+reduced to one job. Five things can be tracked — **stocks, funds, crypto, cash,
+and term deposits (savings)** — in **VND and USD**, read in **Vietnamese or
+English**. That is the whole feature list; see [Scope](#scope) for what was
+deliberately left out.
 
 ![Overview](docs/overview.svg)
 
@@ -36,8 +37,8 @@ relative paths and there is no CORS surface in either mode.
 ### Tests
 
 ```bash
-cd backend  && uv run pytest      # 113 tests, no network access
-cd frontend && pnpm test          # dictionaries and formatters
+cd backend  && uv run pytest      # 170 tests, no network access
+cd frontend && pnpm test          # 17 tests: formatters and the dictionaries
 
 # and, against a running server with the real network:
 ./scripts/acceptance.sh           # the acceptance criteria from docs/SPEC.md §9
@@ -62,6 +63,16 @@ number in place, in one action, and the date it was written down is stamped
 alongside it. This is intentional: a ledger nobody maintains is worse than a
 balance everybody updates.
 
+**Savings** — term deposits: the bank, the principal, the rate the contract
+quotes, and the term. You do not retype its value, because the app can work it
+out: interest accrues by the day, and the card shows what it is worth today,
+how much of that is interest, and what it will pay at maturity. When a term
+matures the interest stops — that is a fact about the contract, not a bug — and
+the card offers the two things that can happen next: **roll it over** (the
+interest becomes the new principal) or **withdraw it**, which closes the
+deposit and records the proceeds as cash in one step so the same money is never
+counted twice.
+
 **Market** — every stored price and exchange rate with the dates that make them
 readable: the session a close belongs to, when it was fetched, and whether a
 rate is a published one or the placeholder used offline.
@@ -69,6 +80,10 @@ rate is a published one or the placeholder used offline.
 **Settings** — the display currency and the language, the path to your database
 file so you know what to back up, and a wipe that deletes every record behind a
 confirmation (keeping your settings and the cached rates).
+
+Refreshing is one button in the header. What it did is then reported under it,
+per symbol: a feed that answered for nineteen holdings and not the twentieth is
+one line of news, not a failure of the page.
 
 ## How the numbers stay honest
 
@@ -83,6 +98,10 @@ Three rules, each of which is enforced in code and covered by tests:
 3. **A number travels with its currency and its date.** A rate is stored per
    day and per base; a valuation records the currency it was written in, so
    changing the display currency later never rewrites history.
+4. **A derived figure is derived the way the contract says.** Deposit interest
+   is simple, on actual days held over a 365-day year, and stops at maturity —
+   not compounded daily, which would overstate every figure by about 1.4 % and
+   would not match the bank's own statement.
 
 ## Supported symbols
 
@@ -101,6 +120,7 @@ currency you told the app you do not hold. Prefer a VND- or USD-quoted listing
 
 Deliberately **not** here, in contrast to the project this was reduced from:
 
+- interest payment schedules other than "at maturity" (coupons, monthly payouts)
 - goals, targets, planning, accumulation plans
 - any AI advisor, chat, or agent — no OpenRouter, no MCP, no web search
 - income, expenses, budgets, cash-flow analysis
@@ -117,20 +137,21 @@ Deliberately **not** here, in contrast to the project this was reduced from:
 backend/app/
   money.py          the shared vocabulary: currencies, kinds, languages
   database.py       SQLite engine, session, the instrument-registering hook
-  models.py         the seven tables
+  models.py         the eight tables
   market.py         Yahoo Finance: what a symbol is, what it closed at
   fx.py             rates, and the rule that keeps a total honest
+  deposits.py       term deposits: the interest arithmetic, in one place
   valuation.py      what it is all worth, in one currency
   pricing.py        refreshing, and reporting per-symbol failures
   settings_store.py the display currency and the language
-  routers/          assets, cash, portfolio, market, settings
+  routers/          assets, cash, deposits, portfolio, market, settings
 
 frontend/src/
   api/              one function per endpoint, and the types it returns
   i18n/             the dictionaries, t(), and every formatter
   state/            the shared settings/portfolio state
   components/       the interface kit and the symbol picker
-  views/            Overview, Holdings, Cash, Market, Settings
+  views/            Overview, Holdings, Cash, Savings, Market, Settings
 ```
 
 ## Documentation

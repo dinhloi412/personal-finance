@@ -21,6 +21,7 @@ export interface Dict {
   "nav.dashboard": string;
   "nav.holdings": string;
   "nav.cash": string;
+  "nav.savings": string;
   "nav.market": string;
   "nav.settings": string;
 
@@ -30,13 +31,10 @@ export interface Dict {
   "action.edit": string;
   "action.delete": string;
   "action.confirm": string;
-  "action.close": string;
-  "action.add": string;
   "action.refresh": string;
   "action.retry": string;
   "action.copy": string;
   "action.copied": string;
-  "action.dismiss": string;
 
   // -- generic states -------------------------------------------------------
   "state.loading": string;
@@ -52,12 +50,12 @@ export interface Dict {
   "kind.fund": string;
   "kind.crypto": string;
   "kind.cash": string;
+  "kind.deposit": string;
   "kind.all": string;
 
   "currency.VND": string;
   "currency.USD": string;
   "field.currency": string;
-  "field.base_currency": string;
 
   // A language names itself, so these two read the same in both dictionaries.
   "lang.vi": string;
@@ -94,24 +92,25 @@ export interface Dict {
   "dash.unconverted_hint": string;
   "dash.snapshot": string;
   "dash.snapshot_done": string;
-  "dash.refresh": string;
   "dash.refresh_done": string;
   "dash.refresh_failed": string;
   "dash.empty_title": string;
   "dash.empty_body": string;
   "dash.count_assets": string;
   "dash.count_cash": string;
+  "dash.count_deposits": string;
+  "dash.allocation_share": string;
+  "dash.history_first": string;
+  "dash.history_single": string;
 
   // -- positions ------------------------------------------------------------
   "hold.title": string;
   "hold.add": string;
-  "hold.edit": string;
   "hold.search": string;
   "hold.search_placeholder": string;
   "hold.count": string;
   "hold.total": string;
   "hold.symbol": string;
-  "hold.name": string;
   "hold.kind": string;
   "hold.quantity": string;
   "hold.price": string;
@@ -123,6 +122,8 @@ export interface Dict {
   "hold.actions": string;
   "hold.price_now": string;
   "hold.delete_confirm": string;
+  "hold.delete_title": string;
+  "hold.delete_action": string;
   "hold.none_title": string;
   "hold.none_body": string;
   "hold.none_filtered": string;
@@ -130,7 +131,6 @@ export interface Dict {
   // -- the position form ----------------------------------------------------
   "form.add_title": string;
   "form.edit_title": string;
-  "form.symbol": string;
   "form.symbol_hint": string;
   "form.name": string;
   "form.kind": string;
@@ -149,8 +149,6 @@ export interface Dict {
   "pick.searching": string;
   "pick.no_results": string;
   "pick.degraded": string;
-  "pick.type_anyway": string;
-  "pick.choose": string;
 
   // -- cash -----------------------------------------------------------------
   "cash.title": string;
@@ -164,14 +162,63 @@ export interface Dict {
   "cash.subtotal": string;
   "cash.edit_title": string;
   "cash.delete_confirm": string;
+  "cash.delete_title": string;
+  "cash.delete_action": string;
   "cash.edit_balance": string;
   "cash.balance_saved": string;
   "cash.none_title": string;
   "cash.none_body": string;
   "cash.total": string;
 
+  // -- savings (term deposits) ---------------------------------------------
+  "dep.title": string;
+  "dep.add": string;
+  "dep.note": string;
+  "dep.bank": string;
+  "dep.principal": string;
+  "dep.rate": string;
+  "dep.rate_unit": string;
+  "dep.rate_hint": string;
+  "dep.start_date": string;
+  "dep.maturity_date": string;
+  "dep.maturity_hint": string;
+  "dep.demand": string;
+  "dep.demand_hint": string;
+  "dep.term_days": string;
+  "dep.days_accrued": string;
+  "dep.days_remaining": string;
+  "dep.interest_accrued": string;
+  "dep.interest_at_maturity": string;
+  "dep.value": string;
+  "dep.value_at_maturity": string;
+  "dep.value_in_base": string;
+  "dep.matured": string;
+  "dep.matured_hint": string;
+  "dep.accruing": string;
+  "dep.roll": string;
+  "dep.roll_title": string;
+  "dep.roll_hint": string;
+  "dep.roll_new_principal": string;
+  "dep.roll_new_rate": string;
+  "dep.roll_new_maturity": string;
+  "dep.roll_done": string;
+  "dep.withdraw": string;
+  "dep.withdraw_title": string;
+  "dep.withdraw_hint": string;
+  "dep.withdraw_account": string;
+  "dep.withdraw_amount": string;
+  "dep.withdraw_done": string;
+  "dep.edit_title": string;
+  "dep.delete_confirm": string;
+  "dep.none_title": string;
+  "dep.none_body": string;
+  "dep.subtotal": string;
+  "dep.projection": string;
+  "dep.projection_empty": string;
+  "dep.rate_invalid": string;
+  "dep.dates_invalid": string;
+
   // -- market ---------------------------------------------------------------
-  "market.title": string;
   "market.prices": string;
   "market.prices_note": string;
   "market.symbol": string;
@@ -218,7 +265,6 @@ export interface Dict {
   "set.scope": string;
   "set.scope_tracks": string;
   "set.scope_does_not": string;
-  "set.save_failed": string;
 }
 
 export type TranslationKey = keyof Dict;

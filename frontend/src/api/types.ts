@@ -16,7 +16,13 @@
 
 export type Currency = "VND" | "USD";
 export type MarketKind = "stock" | "fund" | "crypto";
-export type AssetKind = MarketKind | "cash";
+/** Everything that makes up the net worth, including the two kinds with no
+ * market behind them: cash, which the user counts, and a term deposit, whose
+ * value is computed from its own terms. */
+export type AssetKind = MarketKind | "cash" | "deposit";
+/** The only interest behaviour implemented, so the type says so rather than
+ * offering a choice that would do nothing. */
+export type InterestMode = "at_maturity";
 export type Lang = "vi" | "en";
 
 /** Why a figure is missing. Rendered as an explanation, never as a dash. */
@@ -119,21 +125,90 @@ export interface Unconverted {
   reason: UnpricedReason | null;
 }
 
+export interface Deposit {
+  id: number;
+  name: string;
+  currency: Currency;
+  principal: number;
+  /** Percent per year, as the contract quotes it: 6.5 means 6.5%. */
+  annual_rate: number;
+  start_date: string;
+  /** Null is a demand deposit (không kỳ hạn): no end, keeps accruing. */
+  maturity_date: string | null;
+  interest_mode: InterestMode;
+  note: string | null;
+
+  /** The day the interest was computed for. */
+  as_of: string;
+  days_accrued: number;
+  interest_accrued: number;
+  /** principal + interest_accrued, in the deposit's own currency. */
+  value: number;
+  /** Interest has stopped: the money needs a decision. */
+  matured: boolean;
+  days_remaining: number | null;
+  /** principal + full-term interest. */
+  value_at_maturity: number;
+
+  value_base: number | null;
+  interest_base: number | null;
+  reason: UnpricedReason | null;
+}
+
+export interface DepositInput {
+  name: string;
+  currency: Currency;
+  principal: number;
+  annual_rate: number;
+  start_date: string;
+  maturity_date?: string | null;
+  interest_mode?: InterestMode;
+  note?: string | null;
+}
+
+export type DepositPatch = Partial<DepositInput>;
+
+export interface DepositRoll {
+  principal?: number | null;
+  annual_rate?: number | null;
+  start_date?: string | null;
+  maturity_date?: string | null;
+  note?: string | null;
+}
+
+export interface DepositWithdraw {
+  account_name?: string | null;
+  balance?: number | null;
+}
+
+export interface DepositWithdrawn {
+  closed_deposit_id: number;
+  cash: CashAccount;
+  amount: number;
+}
+
 export interface Portfolio {
   base_currency: Currency;
   total: number;
   market_value: number;
   cash_value: number;
+  deposit_value: number;
   cost_base: number | null;
   gain: number | null;
   gain_pct: number | null;
   assets: Asset[];
   cash: CashAccount[];
+  deposits: Deposit[];
   by_kind: KindTotal[];
   by_currency: CurrencyTotal[];
   unconverted: Unconverted[];
   rates: RateUsed[];
-  counts: { assets: number; cash: number; unconverted: number };
+  counts: {
+    assets: number;
+    cash: number;
+    deposits: number;
+    unconverted: number;
+  };
 }
 
 export interface ValuationPoint {
@@ -142,6 +217,7 @@ export interface ValuationPoint {
   total: number;
   market_value: number;
   cash_value: number;
+  deposit_value: number;
   cost_value: number | null;
   unconverted_count: number;
 }

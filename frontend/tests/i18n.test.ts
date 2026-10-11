@@ -70,3 +70,44 @@ test("both languages use the same placeholders in the same keys", () => {
     );
   }
 });
+
+/**
+ * Every declared key must be reachable from the source.
+ *
+ * A key nothing reads is a translation someone wrote, and will keep writing,
+ * for a label that no longer exists. The check reads the source rather than
+ * importing it, because the keys are used as string literals inside `t()` and
+ * a type cannot see that they are never called.
+ */
+test("no dictionary key is dead", async () => {
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(full)) files.push(full);
+    }
+  };
+  walk("src");
+
+  const source = files
+    .filter((file) => !file.includes("/i18n/"))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+
+  /**
+   * Labels built by template: `t(`kind.${row.kind}`)`. The whole family is
+   * reachable from that one expression, so the prefix is what has to appear.
+   */
+  const prefixes = ["currency.", "kind.", "lang.", "nav.", "reason."];
+
+  const dead = viKeys.filter((key) => {
+    if (source.includes(`"${key}"`)) return false;
+    return !prefixes.some((prefix) => key.startsWith(prefix));
+  });
+
+  assert.deepEqual(dead, [], `these keys are never used: ${dead.join(", ")}`);
+});

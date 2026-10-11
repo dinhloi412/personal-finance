@@ -194,7 +194,7 @@ class TestTheTotal:
 
     def test_every_kind_is_reported_even_when_it_is_empty(self, held):
         kinds = [row["kind"] for row in valuation.portfolio(held).by_kind]
-        assert kinds == ["stock", "fund", "crypto", "cash"]
+        assert kinds == ["stock", "fund", "crypto", "cash", "deposit"]
 
     def test_cash_in_two_currencies_lands_in_one_total(self, held):
         by_kind = {row["kind"]: row for row in valuation.portfolio(held).by_kind}

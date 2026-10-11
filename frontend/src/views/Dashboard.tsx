@@ -39,6 +39,7 @@ import {
   Table,
   Td,
   Th,
+  seriesColor,
 } from "../components/ui";
 import {
   DASH,
@@ -46,6 +47,7 @@ import {
   formatMoney,
   formatMonthDay,
   formatPercent,
+  formatShare,
   formatSignedMoney,
   useLang,
   useT,
@@ -60,7 +62,13 @@ import { useApp } from "../state/AppContext";
  * other side of the wire too: a pie that silently loses its "crypto" slice
  * reads as a bug, while a legend that says 0 is information.
  */
-const KIND_ORDER: AssetKind[] = ["stock", "fund", "crypto", "cash"];
+const KIND_ORDER: AssetKind[] = [
+  "stock",
+  "fund",
+  "crypto",
+  "cash",
+  "deposit",
+];
 
 export function Dashboard() {
   const t = useT();
@@ -122,6 +130,11 @@ export function Dashboard() {
     value: point.total,
   }));
 
+  // A share of nothing is not zero per cent, it is unknown: the division is
+  // refused rather than turned into a figure that would be read as a fact.
+  const shareOf = (value: number): number | null =>
+    portfolio.total === 0 ? null : (value / portfolio.total) * 100;
+
   const onRefresh = async () => {
     setRefreshing(true);
     setRefreshed(null);
@@ -153,19 +166,6 @@ export function Dashboard() {
       setRecording(false);
     }
   };
-
-  const refreshButton = (
-    <Button
-      size="sm"
-      variant="primary"
-      loading={refreshing}
-      onClick={() => {
-        void onRefresh();
-      }}
-    >
-      {t("dash.refresh")}
-    </Button>
-  );
 
   const notices = (
     <>
@@ -225,6 +225,20 @@ export function Dashboard() {
               </li>
             ))}
           </ul>
+          {/* The refresh button lives in the header now. This report keeps its
+              own way to ask again — the same refresh, retried — so the symbols
+              named here are the ones the retry acts on. */}
+          <div className="mt-2">
+            <Button
+              size="sm"
+              loading={refreshing}
+              onClick={() => {
+                void onRefresh();
+              }}
+            >
+              {t("action.retry")}
+            </Button>
+          </div>
         </Notice>
       )}
 
@@ -238,11 +252,15 @@ export function Dashboard() {
 
   // Nothing at all: a total of zero would be a claim about a portfolio that
   // does not exist yet, so the page explains how to start one instead.
-  if (portfolio.counts.assets === 0 && portfolio.counts.cash === 0) {
+  if (
+    portfolio.counts.assets === 0 &&
+    portfolio.counts.cash === 0 &&
+    portfolio.counts.deposits === 0
+  ) {
     return (
       <div className="space-y-4">
         {notices}
-        <Card title={t("dash.title")} actions={refreshButton}>
+        <Card title={t("dash.title")}>
           <EmptyState title={t("dash.empty_title")} body={t("dash.empty_body")} />
         </Card>
       </div>
@@ -253,7 +271,7 @@ export function Dashboard() {
     <div className="space-y-4">
       {notices}
 
-      <Card title={t("dash.title")} actions={refreshButton}>
+      <Card title={t("dash.title")}>
         <Stat
           label={t("dash.total")}
           value={formatMoney(portfolio.total, base, lang)}
@@ -302,6 +320,11 @@ export function Dashboard() {
             {t("dash.count_assets", { count: portfolio.counts.assets })}
           </span>
           <span>{t("dash.count_cash", { count: portfolio.counts.cash })}</span>
+          {portfolio.counts.deposits > 0 && (
+            <span>
+              {t("dash.count_deposits", { count: portfolio.counts.deposits })}
+            </span>
+          )}
         </p>
       </Card>
 
@@ -314,16 +337,34 @@ export function Dashboard() {
             }))}
           />
           <ul className="space-y-3">
-            {byKind.map((row) => (
+            {byKind.map((row, index) => (
               <li
                 key={row.kind}
-                className="flex items-center justify-between gap-3"
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
               >
-                <Badge tone={row.value > 0 ? "info" : "neutral"}>
-                  {t(`kind.${row.kind}` as const)}
-                </Badge>
-                <span className="text-sm tabular-nums text-slate-900">
-                  {formatMoney(row.value, base, lang)}
+                <span className="flex items-center gap-2">
+                  {/* The swatch is taken by the same index the pie colours
+                      by, over the same full list, so a legend row can never
+                      point at another kind's slice. */}
+                  <span
+                    aria-hidden="true"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: seriesColor(index) }}
+                  />
+                  <Badge tone={row.value > 0 ? "info" : "neutral"}>
+                    {t(`kind.${row.kind}` as const)}
+                  </Badge>
+                </span>
+                <span className="flex items-baseline gap-2 tabular-nums">
+                  <span className="text-sm text-slate-900">
+                    {formatMoney(row.value, base, lang)}
+                  </span>
+                  <span
+                    className="w-12 text-right text-xs text-slate-500"
+                    title={t("dash.allocation_share")}
+                  >
+                    {formatShare(shareOf(row.value), lang)}
+                  </span>
                 </span>
               </li>
             ))}
@@ -386,6 +427,21 @@ export function Dashboard() {
 
         {chartData.length === 0 ? (
           <EmptyState title={t("state.empty")} body={t("dash.history_empty")} />
+        ) : chartData.length === 1 ? (
+          // One point is not a trend, and a line chart of one point is a dot
+          // floating in an empty box with an axis invented around it. The
+          // figure is printed as the figure it is, dated, and the sentence says
+          // what the second recording will add.
+          <div className="min-w-0">
+            <Stat
+              label={t("dash.history_first")}
+              value={formatMoney(chartData[0].value, chartBase, lang)}
+              hint={formatDate(chartPoints[0].as_of, lang)}
+            />
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              {t("dash.history_single")}
+            </p>
+          </div>
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">

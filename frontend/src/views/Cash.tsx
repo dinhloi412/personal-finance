@@ -436,8 +436,7 @@ export function Cash() {
             }
           />
           <Textarea
-            label={t("cash.note")}
-            hint={t("state.optional")}
+            label={`${t("cash.note")} (${t("state.optional")})`}
             value={addNote}
             onChange={(event) => setAddNote(event.target.value)}
           />
@@ -477,8 +476,7 @@ export function Cash() {
             hint={t("form.currency_hint")}
           />
           <Textarea
-            label={t("cash.note")}
-            hint={t("state.optional")}
+            label={`${t("cash.note")} (${t("state.optional")})`}
             value={editNote}
             onChange={(event) => setEditNote(event.target.value)}
           />
@@ -487,7 +485,7 @@ export function Cash() {
 
       <Modal
         open={removeRow !== null}
-        title={t("action.delete")}
+        title={t("cash.delete_title")}
         onClose={() => setRemoveRow(null)}
         footer={
           <>
@@ -497,7 +495,7 @@ export function Cash() {
               loading={busy}
               onClick={() => void confirmDelete()}
             >
-              {t("action.delete")}
+              {t("cash.delete_action")}
             </Button>
           </>
         }

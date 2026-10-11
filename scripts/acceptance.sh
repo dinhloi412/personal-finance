@@ -132,7 +132,35 @@ bases="$(curl -fsS "$base/api/portfolio/history" | jq_get "[p['base_currency'] f
 check "re-recording the same day replaces it, in the new base" "$bases" "['VND']"
 
 echo
-echo "9. language (criterion 6)"
+echo "9. a term deposit earns interest the contract's way (criterion 2b)"
+year_ago="$(python3 -c 'import datetime;print((datetime.date.today()-datetime.timedelta(days=365)).isoformat())')"
+today="$(python3 -c 'import datetime;print(datetime.date.today().isoformat())')"
+deposit="$(curl -fsS -X POST "$base/api/deposits" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Vietcombank 12 thang\",\"currency\":\"VND\",\"principal\":1000000000,\"annual_rate\":6,\"start_date\":\"$year_ago\",\"maturity_date\":\"$today\"}")"
+deposit_id="$(printf '%s' "$deposit" | jq_get "['id']")"
+interest="$(printf '%s' "$deposit" | jq_get "['interest_accrued']")"
+check "365 days at 6% of 1bn is 60,000,000" "$interest" "60000000.0"
+matured="$(printf '%s' "$deposit" | jq_get "['matured']")"
+check "the term has matured" "$matured" "True"
+counted="$(curl -fsS "$base/api/portfolio" | jq_get "['counts']['deposits']")"
+check "the deposit is counted in the portfolio" "$counted" "1"
+
+echo
+echo "10. withdrawing a deposit moves the money, it does not create it (criterion 9)"
+before="$(curl -fsS "$base/api/portfolio" | jq_get "['total']")"
+curl -fsS -X POST "$base/api/deposits/$deposit_id/withdraw" -H 'Content-Type: application/json' \
+  -d '{"account_name":"Vietcombank TK"}' >/dev/null
+after="$(curl -fsS "$base/api/portfolio" | jq_get "['total']")"
+if python3 "$(dirname "$0")/compare_money.py" "$before" "$after"; then
+  failures=$((failures + 0))
+else
+  failures=$((failures + 1))
+fi
+remaining="$(curl -fsS "$base/api/deposits" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')"
+check "the closed deposit is gone" "$remaining" "0"
+
+echo
+echo "11. language (criterion 6)"
 curl -fsS -X PATCH "$base/api/settings" -H 'Content-Type: application/json' \
   -d '{"language":"en"}' >/dev/null
 language="$(curl -fsS "$base/api/settings" | jq_get "['language']")"

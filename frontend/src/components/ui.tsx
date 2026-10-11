@@ -26,6 +26,7 @@ import {
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
+  MouseEvent,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
@@ -183,11 +184,15 @@ export function IconButton({
   onClick,
   children,
   disabled = false,
+  className = "",
 }: {
   label: string;
-  onClick: () => void;
+  /** Handed the event so a caller can anchor a menu to the button itself. */
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
   disabled?: boolean;
+  /** Lets a caller draw the button as a control rather than as bare glyph. */
+  className?: string;
 }) {
   return (
     <button
@@ -196,7 +201,7 @@ export function IconButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300"
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300 ${className}`}
     >
       {children}
     </button>
@@ -352,7 +357,10 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONES[tone]}`}
+      // A pill is one line by definition. Wrapped, the second line spills out
+      // of the rounded ends and the badge stops reading as a badge; a wider
+      // column scrolls inside the table, which is the smaller price.
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONES[tone]}`}
     >
       {children}
     </span>
@@ -386,7 +394,7 @@ export function Th({
   return (
     <th
       scope="col"
-      className={`whitespace-nowrap px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 ${ALIGN[align]}`}
+      className={`whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 ${ALIGN[align]}`}
     >
       {children}
     </th>
@@ -403,7 +411,9 @@ export function Td({
   className?: string;
 }) {
   return (
-    <td className={`px-2 py-2 align-middle text-slate-700 ${ALIGN[align]} ${className}`}>
+    <td
+      className={`px-3 py-2.5 align-middle text-slate-700 ${ALIGN[align]} ${className}`}
+    >
       {children}
     </td>
   );
@@ -649,11 +659,18 @@ export function AllocationPie({
   slices: { label: string; value: number; color?: string }[];
   height?: number;
 }) {
-  const data = slices.filter((slice) => slice.value > 0);
+  // The colour belongs to the slice's place in the FULL list, before empty
+  // kinds are dropped, so the legend can name the same colour with the same
+  // index and no swatch can point at another kind's slice.
+  const coloured = slices.map((slice, index) => ({
+    ...slice,
+    color: slice.color ?? seriesColor(index),
+  }));
+  const data = coloured.filter((slice) => slice.value > 0);
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center text-sm text-slate-400"
+        className="flex w-full min-w-0 items-center justify-center text-sm text-slate-400"
         style={{ height }}
       >
         {DASH}
@@ -661,7 +678,10 @@ export function AllocationPie({
     );
   }
   return (
-    <div style={{ height }}>
+    // The wrapper states both of its own dimensions and is allowed to shrink.
+    // A chart that measures a parent instead would draw nothing inside a grid
+    // cell whose height only exists once its contents have one.
+    <div className="w-full min-w-0" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -672,12 +692,14 @@ export function AllocationPie({
             outerRadius="85%"
             paddingAngle={2}
             stroke="none"
+            // Drawn at once rather than swept in: an entry animation is a
+            // second of missing chart on a first paint, and a chart that is
+            // only correct once the animation has run is a chart that is wrong
+            // in every screenshot taken before it finishes.
+            isAnimationActive={false}
           >
-            {data.map((slice, index) => (
-              <Cell
-                key={slice.label}
-                fill={slice.color ?? seriesColor(index)}
-              />
+            {data.map((slice) => (
+              <Cell key={slice.label} fill={slice.color} />
             ))}
           </Pie>
           <Tooltip formatter={compactNumber} />

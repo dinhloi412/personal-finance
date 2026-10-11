@@ -85,6 +85,11 @@ class TestScope:
             "/api/assets/{asset_id}/price",
             "/api/cash",
             "/api/cash/{account_id}",
+            "/api/deposits",
+            "/api/deposits/{deposit_id}",
+            "/api/deposits/{deposit_id}/roll",
+            "/api/deposits/{deposit_id}/schedule",
+            "/api/deposits/{deposit_id}/withdraw",
             "/api/fx",
             "/api/fx/refresh",
             "/api/health",
@@ -141,7 +146,7 @@ class TestClosedSets:
 
         assert CURRENCIES == ("VND", "USD")
         assert BASE_CURRENCIES == ("VND", "USD")
-        assert ASSET_KINDS == ("stock", "fund", "crypto", "cash")
+        assert ASSET_KINDS == ("stock", "fund", "crypto", "cash", "deposit")
         assert LANGUAGES == ("vi", "en")
 
     def test_the_only_currency_type_is_the_two_currency_one(self):

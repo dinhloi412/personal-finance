@@ -187,7 +187,7 @@ export function Market() {
           >
             {prices.map((row) => (
               <tr key={row.symbol}>
-                <Td className="font-medium text-slate-900">{row.symbol}</Td>
+                <Td className="whitespace-nowrap font-medium text-slate-900">{row.symbol}</Td>
                 <Td align="right">
                   {row.currency
                     ? formatMoney(row.price, row.currency, lang)

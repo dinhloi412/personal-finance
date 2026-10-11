@@ -83,6 +83,62 @@ runnable, so a mistake is found in the milestone that made it.
 - **Done when:** `pnpm build` is green and every SPEC §9 acceptance item can be
   clicked through.
 
+## M6b — Term deposits (added after the first build)
+
+Asked for after the app was working, and the interesting part was deciding
+*where* it goes rather than how to write it.
+
+**It is a fifth kind of holding, not a variety of cash.** The question "should a
+deposit live in the cash table?" has a clear answer once the source of value is
+named:
+
+| | where the value comes from | who decides it |
+|---|---|---|
+| market position | a quote from outside | the market |
+| cash | a balance the user counted | the user |
+| **term deposit** | **the agreement: principal, rate, days held** | **the contract** |
+
+Folding it into cash would mean either making the user retype a figure the app
+can derive from terms it already knows, or storing the principal and losing the
+interest — which is the only reason to track a deposit at all. So:
+
+- `app/models.py` — a `deposits` table: principal, rate, start, maturity,
+  interest mode. Not one nullable column added to cash.
+- `app/deposits.py` — the interest arithmetic, alone, with no session and no
+  rate table in it, so it can be tested as arithmetic.
+- `app/valuation.py` — `value_term_deposit` converts what `deposits.py`
+  computed. Interest is computed in the deposit's own currency FIRST and
+  converted second; doing it the other way applies a rate to the wrong number.
+- `frontend/src/views/Savings.tsx` — its own page, because a card with two
+  dates, a rate and a projection is not a table row.
+- `api/deposits` — including the two endpoints that only exist here, `roll` and
+  `withdraw`, because each moves money between two tables.
+
+**Three conventions, each of which a reader could have chosen differently:**
+
+1. **Simple interest, actual days, 365-day year.** Daily compounding would
+   overstate every figure by about 1.4 % and would not match the bank.
+2. **Interest stops at maturity.** The contract rate is not being paid after
+   the maturity date; carrying it forward would invent income. The record is
+   marked `matured` instead, and offers the decision that is actually waiting.
+3. **A null maturity date is a demand deposit**, which never matures and keeps
+   accruing — the only holding in the app whose value rises with nobody doing
+   anything.
+
+**Two values, not one.** "Value today" and "value at maturity" are both shown.
+The first alone hides why the deposit is held; the second alone claims money
+that has not been earned.
+
+**One bug found while building it, and it was not in the new code.**
+`create_all` does not alter an existing table, so adding `deposits` and
+`valuations.deposit_value` broke every database written by the previous build —
+`no such column: valuations.deposit_value`, raised from an unrelated request, on
+the user's only copy. `app/database.py` now has `add_missing_columns()`, which
+adds what the models declare and the database lacks, and touches nothing else.
+`tests/test_schema_upgrade.py` builds an old-shape database on purpose and
+proves the upgrade, because the rest of the suite builds its schema from the
+models and could never have caught this.
+
 ## M6 — Tests, demo data, run script
 
 - `backend/tests/` — `conftest.py` (in-memory SQLite, monkeypatched network),
@@ -115,8 +171,19 @@ runnable, so a mistake is found in the milestone that made it.
 | M3 valuation | done | `tests/test_valuation.py` |
 | M4 API | done | `tests/test_api.py`, 18 routes asserted in `test_scope.py` |
 | M5 frontend | done | `pnpm build`, 13 node tests |
-| M6 tests, demo, run script | done | **104 backend tests pass**, `app/seed.py`, `start.sh` |
-| M7 verify | done | live run against Yahoo + the FX feed on port 8010; `scripts/acceptance.sh` green |
+| M6 tests, demo, run script | done | **170 backend tests pass**, `app/seed.py`, `start.sh` |
+| M6b term deposits | done | `tests/test_deposits.py` (23), `test_api.py::TestDeposits` (20), `tests/test_schema_upgrade.py` (5) |
+| M7 verify | done | live run against Yahoo + the FX feed on port 8010; `scripts/acceptance.sh` green, 11 sections |
+| M8 UI pass | done | every page screenshotted and read at 1440 and (via CDP) 390; `pnpm test` now 17 |
+
+The screenshot pass found six more, all fixed: the allocation donut measured
+zero height inside a grid cell and never drew; a one-point history chart drew an
+empty box with a floating dot; the Overview duplicated the header's refresh
+button; the allocation legend had no percentages and its swatches were indexed
+differently from the slices; table cells were padded at 8px so the Cash header
+read as run-together words; and deposits were missing from the allocation
+entirely until they were added to the frontend's kind list — the API had been
+returning them all along.
 
 Two more things the frontend work surfaced, and what was done about them:
 
@@ -130,8 +197,9 @@ Two more things the frontend work surfaced, and what was done about them:
   keeps the settings and the cached prices and rates — a fresh start must still
   be able to convert what the user types in next.
 
-Three things were found by verifying rather than by building, and each changed
-the design:
+Seven things were found by verifying rather than by building, and each changed
+the design. The first three came from the API, the rest from screenshotting
+every page and reading the result:
 
 - **A refresh only knew one base.** The first live run switched the display
   currency to USD and got a total of 3 000 instead of 20 339, because no rate
@@ -145,6 +213,17 @@ the design:
 - **A placeholder rate was indistinguishable from a real one on any given
   day.** `Rate.stale` now means "not published for the day asked", so a rate
   carried over from another day is labelled exactly like the seed.
+- **The allocation chart drew nothing.** It was not a zero-height grid cell —
+  the DOM measured 527×200. Recharts animates a `Pie` in by default, and both
+  a screenshot and a slow machine capture the frame before it draws. Every
+  chart in the kit now sets `isAnimationActive={false}`, which is also why the
+  line charts had always rendered.
+- **`Th`/`Td` used 8px of padding**, so the Cash header read as one run of
+  words. Now 12px, with a little more vertical room.
+- **Deposits were missing from the allocation** for a few minutes, and the
+  percentages exposed it immediately: the frontend's kind list is its own
+  constant, so a new kind has to be added in two places, and the second one
+  was forgotten. Worth knowing: the API had been returning it all along.
 
 ## Risk register
 
@@ -158,6 +237,11 @@ the design:
 | i18n drift (missing key) | One `Dict` interface for both trees + a parity test |
 | Scope creep back toward the reference app | `test_scope.py` fails on a forbidden module name, on an AI-provider string, and on any API path outside the 19 the spec lists |
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
+| A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
+| A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| An existing database missing a new column | `add_missing_columns()` at startup, tested against a deliberately old-shape database |
+| Compounding a deposit the way the bank does not | Simple interest on actual days over 365, asserted against hand-checkable figures |
+| Counting withdrawn money twice | Withdrawal closes the deposit and writes the cash in one request, and a test asserts the total is unchanged |
 | Float rounding on VND (large integers) | Round for display only; VND shown with 0 decimals |
 
 ## Order of work

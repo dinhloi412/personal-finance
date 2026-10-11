@@ -7,6 +7,8 @@ written against, not just the functions behind it.
 
 from __future__ import annotations
 
+import datetime
+
 import pytest
 
 
@@ -402,3 +404,215 @@ class TestWiping:
             "cash": 0,
             "valuations": 0,
         }
+
+
+class TestDeposits:
+    """The savings endpoints, including the two things that only happen at
+    maturity: rolling over, and taking the money out."""
+
+    def _create(self, client, **overrides):
+        body = {
+            "name": "Vietcombank 6 tháng",
+            "currency": "VND",
+            "principal": 500_000_000,
+            "annual_rate": 6.0,
+            "start_date": "2026-01-01",
+            "maturity_date": "2026-07-01",
+        }
+        body.update(overrides)
+        return client.post("/api/deposits", json=body)
+
+    def test_a_deposit_can_be_opened(self, client):
+        response = self._create(client)
+        assert response.status_code == 201
+        body = response.json()
+        assert body["principal"] == 500_000_000
+        assert body["annual_rate"] == 6.0
+        assert body["value"] >= body["principal"]
+        assert body["interest_accrued"] >= 0
+        assert "T" not in body["as_of"]  # a date, not a timestamp
+
+    def test_a_rate_above_one_hundred_percent_is_refused(self, client):
+        assert self._create(client, annual_rate=150).status_code == 422
+
+    def test_a_principal_of_zero_is_refused(self, client):
+        assert self._create(client, principal=0).status_code == 422
+
+    def test_a_maturity_before_the_start_is_refused(self, client):
+        response = self._create(client, start_date="2026-07-01", maturity_date="2026-01-01")
+        assert response.status_code == 422
+
+    def test_a_demand_deposit_has_no_maturity_date(self, client):
+        body = self._create(client, maturity_date=None).json()
+        assert body["maturity_date"] is None
+        assert body["matured"] is False
+        assert body["days_remaining"] is None
+
+    def test_a_deposit_counts_towards_the_portfolio_total(self, client):
+        before = client.get("/api/portfolio").json()
+        self._create(client)
+        after = client.get("/api/portfolio").json()
+        assert after["deposit_value"] > 0
+        assert after["total"] == pytest.approx(before["total"] + after["deposit_value"])
+        assert after["counts"]["deposits"] == 1
+
+    def test_a_deposit_appears_as_its_own_kind(self, client):
+        self._create(client)
+        kinds = {row["kind"]: row for row in client.get("/api/portfolio").json()["by_kind"]}
+        assert kinds["deposit"]["count"] == 1
+        assert kinds["deposit"]["value"] > 0
+
+    def test_a_dollar_deposit_is_converted(self, client):
+        # A one-day term, so `value` is the principal and this test is about
+        # the conversion rather than about the interest arithmetic.
+        body = self._create(
+            client,
+            currency="USD",
+            principal=10_000,
+            annual_rate=4.0,
+            start_date="2026-01-01",
+            maturity_date="2026-01-02",
+        ).json()
+        assert body["value_base"] == pytest.approx(10_000 * 26_000, rel=0.001)
+
+    def test_a_deposit_in_a_currency_the_app_cannot_hold_is_refused(self, client):
+        assert self._create(client, currency="EUR").status_code == 422
+
+    def test_a_deposit_can_be_edited(self, client):
+        created = self._create(client).json()
+        updated = client.patch(
+            f"/api/deposits/{created['id']}", json={"annual_rate": 7.5}
+        ).json()
+        assert updated["annual_rate"] == 7.5
+        assert updated["interest_accrued"] > created["interest_accrued"]
+
+    def test_editing_to_a_maturity_before_the_start_is_refused(self, client):
+        created = self._create(client).json()
+        response = client.patch(
+            f"/api/deposits/{created['id']}", json={"maturity_date": "2025-01-01"}
+        )
+        assert response.status_code == 422
+
+    def test_a_deposit_can_be_deleted(self, client):
+        created = self._create(client).json()
+        assert client.delete(f"/api/deposits/{created['id']}").status_code == 204
+        assert client.get("/api/deposits").json() == []
+
+    def test_the_schedule_runs_to_maturity(self, client):
+        created = self._create(client).json()
+        points = client.get(f"/api/deposits/{created['id']}/schedule").json()
+        assert points[-1]["as_of"] == "2026-07-01"
+        assert points[-1]["value"] >= points[0]["value"]
+        values = [point["value"] for point in points]
+        assert values == sorted(values)
+
+    def test_the_schedule_of_an_ended_term_is_the_one_point_that_matters(self, client):
+        created = self._create(
+            client, start_date="2020-01-01", maturity_date="2020-07-01"
+        ).json()
+        points = client.get(f"/api/deposits/{created['id']}/schedule").json()
+        assert [point["as_of"] for point in points] == ["2020-07-01"]
+        assert points[0]["matured"] is True
+
+    def test_listing_can_be_filtered_to_what_has_matured(self, client):
+        self._create(client, start_date="2020-01-01", maturity_date="2020-07-01")
+        self._create(client, start_date="2099-01-01", maturity_date="2099-07-01")
+        assert len(client.get("/api/deposits").json()) == 2
+        assert len(client.get("/api/deposits", params={"matured": True}).json()) == 1
+        assert len(client.get("/api/deposits", params={"matured": False}).json()) == 1
+
+    def test_rolling_over_moves_the_interest_into_the_principal(self, client):
+        # A term that ended yesterday: rolling it over is a decision about the
+        # present, so the new term has to run into the future.
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        half_a_year_before = yesterday - datetime.timedelta(days=181)
+        created = self._create(
+            client,
+            start_date=half_a_year_before.isoformat(),
+            maturity_date=yesterday.isoformat(),
+        ).json()
+        rolled = client.post(f"/api/deposits/{created['id']}/roll", json={}).json()
+
+        # The interest must not vanish: it becomes the new principal.
+        assert rolled["principal"] == pytest.approx(created["value"])
+        assert rolled["principal"] > 500_000_000
+        # Same bank, same rate, a new period of the same length.
+        assert rolled["name"] == created["name"]
+        assert rolled["annual_rate"] == created["annual_rate"]
+        assert rolled["start_date"] == yesterday.isoformat()
+        assert rolled["maturity_date"] == (
+            yesterday + datetime.timedelta(days=181)
+        ).isoformat()
+        assert rolled["matured"] is False
+        # One day has already passed since the new term began (it began
+        # yesterday), so 181 days of term means 180 days still to run.
+        assert rolled["days_remaining"] == 180
+
+    def test_rolling_over_can_change_the_rate_and_the_principal(self, client):
+        created = self._create(
+            client, start_date="2020-01-01", maturity_date="2020-07-01"
+        ).json()
+        rolled = client.post(
+            f"/api/deposits/{created['id']}/roll",
+            json={"annual_rate": 8.0, "principal": 600_000_000},
+        ).json()
+        assert rolled["annual_rate"] == 8.0
+        assert rolled["principal"] == 600_000_000
+
+    def test_a_deposit_that_has_not_matured_cannot_be_rolled_over(self, client):
+        created = self._create(
+            client, start_date="2099-01-01", maturity_date="2099-07-01"
+        ).json()
+        response = client.post(f"/api/deposits/{created['id']}/roll", json={})
+        assert response.status_code == 422
+        # And it is still there, unchanged.
+        assert client.get(f"/api/deposits/{created['id']}").json()["principal"] == 500_000_000
+
+    def test_withdrawing_closes_the_deposit_and_creates_cash(self, client):
+        created = self._create(
+            client, start_date="2020-01-01", maturity_date="2020-07-01"
+        ).json()
+        result = client.post(f"/api/deposits/{created['id']}/withdraw", json={}).json()
+
+        assert result["amount"] == pytest.approx(created["value"])
+        assert result["cash"]["balance"] == pytest.approx(created["value"])
+        assert result["cash"]["currency"] == "VND"
+        # The deposit is gone, so the money is not counted twice.
+        assert client.get("/api/deposits").json() == []
+        assert len(client.get("/api/cash").json()) == 1
+
+    def test_withdrawing_can_name_the_account_and_the_amount(self, client):
+        created = self._create(
+            client, start_date="2020-01-01", maturity_date="2020-07-01"
+        ).json()
+        result = client.post(
+            f"/api/deposits/{created['id']}/withdraw",
+            json={"account_name": "Vietcombank tiết kiệm", "balance": 600_000_000},
+        ).json()
+        assert result["cash"]["name"] == "Vietcombank tiết kiệm"
+        assert result["cash"]["balance"] == 600_000_000
+
+    def test_a_withdrawal_leaves_the_total_whole(self, client):
+        """Moving money between two tables must not create or destroy any."""
+        created = self._create(
+            client, start_date="2020-01-01", maturity_date="2020-07-01"
+        ).json()
+        before = client.get("/api/portfolio").json()["total"]
+        client.post(f"/api/deposits/{created['id']}/withdraw", json={})
+        after = client.get("/api/portfolio").json()["total"]
+        assert after == pytest.approx(before)
+
+    def test_a_deposit_can_be_withdrawn_before_maturity(self, client):
+        """Taking money out early is the bank's business, not this app's.
+
+        The app records what the user says the money became; it does not refuse
+        to record a withdrawal the bank has already made.
+        """
+        created = self._create(
+            client, start_date="2099-01-01", maturity_date="2099-07-01"
+        ).json()
+        response = client.post(
+            f"/api/deposits/{created['id']}/withdraw", json={"balance": 500_000_000}
+        )
+        assert response.status_code == 200
+        assert response.json()["amount"] == 500_000_000

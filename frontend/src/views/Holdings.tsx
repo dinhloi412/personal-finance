@@ -237,8 +237,7 @@ function PositionForm({
         </Select>
 
         <Input
-          label={t("form.name")}
-          hint={t("state.optional")}
+          label={`${t("form.name")} (${t("state.optional")})`}
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
@@ -274,8 +273,7 @@ function PositionForm({
         </Select>
 
         <Textarea
-          label={t("form.note")}
-          hint={t("state.optional")}
+          label={`${t("form.note")} (${t("state.optional")})`}
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
@@ -326,24 +324,57 @@ export function Holdings() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
-  const [menuFor, setMenuFor] = useState<number | null>(null);
+  const [menu, setMenu] = useState<{
+    id: number;
+    right: number;
+    top?: number;
+    bottom?: number;
+  } | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // A click anywhere else closes the open menu, which is what a menu is
-  // expected to do the moment it is not the thing being used.
+  // A click anywhere else, a scroll or a resize closes the open menu. The menu
+  // is pinned to the viewport rather than to its cell, so it would otherwise be
+  // left pointing at a row that has moved out from under it.
   useEffect(() => {
-    if (menuFor === null) return undefined;
+    if (menu === null) return undefined;
+    const close = () => setMenu(null);
     const onDocumentDown = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuFor(null);
+        close();
       }
     };
     globalThis.document.addEventListener("mousedown", onDocumentDown);
-    return () =>
+    globalThis.addEventListener("scroll", close, true);
+    globalThis.addEventListener("resize", close);
+    return () => {
       globalThis.document.removeEventListener("mousedown", onDocumentDown);
-  }, [menuFor]);
+      globalThis.removeEventListener("scroll", close, true);
+      globalThis.removeEventListener("resize", close);
+    };
+  }, [menu]);
+
+  /**
+   * Where to pin the menu, in viewport coordinates.
+   *
+   * The table scrolls horizontally and a scroll container clips whatever leaves
+   * it, so an absolutely positioned menu in the last column is cut off by the
+   * card. It opens from the button's right edge — never past the right of the
+   * screen — and downwards when there is more room below than above, which
+   * keeps it on screen for the last row as well as the first.
+   */
+  const anchorMenu = (id: number, button: HTMLElement) => {
+    const rect = button.getBoundingClientRect();
+    // Measured against the viewport a fixed element is positioned in, which is
+    // the document's client box — the scrollbar is not part of it.
+    const viewport = globalThis.document.documentElement;
+    const right = viewport.clientWidth - rect.right;
+    const below = viewport.clientHeight - rect.bottom;
+    return below < rect.top
+      ? { id, right, bottom: viewport.clientHeight - rect.top + 4 }
+      : { id, right, top: rect.bottom + 4 };
+  };
 
   const assets = app.portfolio?.assets ?? [];
   const needle = query.trim().toLowerCase();
@@ -390,7 +421,7 @@ export function Holdings() {
   };
 
   const onPriceOne = async (target: Asset) => {
-    setMenuFor(null);
+    setMenu(null);
     setBusyId(target.id);
     setActionError(null);
     try {
@@ -468,9 +499,10 @@ export function Holdings() {
               head={
                 <>
                   <Th>{t("hold.symbol")}</Th>
-                  <Th>{t("hold.kind")}</Th>
                   <Th align="right">{t("hold.quantity")}</Th>
+                  <Th>{t("hold.kind")}</Th>
                   <Th align="right">{t("hold.price")}</Th>
+                  <Th align="right">{t("hold.price_date")}</Th>
                   <Th align="right">{t("hold.value")}</Th>
                   <Th align="right">{t("hold.cost")}</Th>
                   <Th align="right">{t("hold.gain")}</Th>
@@ -501,21 +533,29 @@ export function Holdings() {
                       <div className="text-xs text-slate-500">{asset.name}</div>
                     </Td>
 
-                    <Td>
-                      <Badge>{t(`kind.${asset.kind}` as const)}</Badge>
-                    </Td>
-
                     <Td align="right" className="tabular-nums">
                       {formatQuantity(asset.quantity, lang)}
                     </Td>
 
-                    {/* The price keeps its own currency and the session it
-                        belongs to; a price without its day is not a fact. */}
-                    <Td align="right" className="tabular-nums">
-                      <div>{formatMoney(asset.price, priceCurrency, lang)}</div>
-                      <div className="text-xs text-slate-500">
-                        {formatDate(asset.price_as_of, lang)}
-                      </div>
+                    <Td>
+                      <Badge>{t(`kind.${asset.kind}` as const)}</Badge>
+                    </Td>
+
+                    {/* The price keeps its own currency, and the session it
+                        belongs to gets its own column: a price without its day
+                        is not a fact, and a second line squeezed under the
+                        number reads as a stray caption rather than as a
+                        column. The two columns sit together, so the price and
+                        its day are still read as one fact. */}
+                    <Td align="right" className="whitespace-nowrap tabular-nums">
+                      {formatMoney(asset.price, priceCurrency, lang)}
+                    </Td>
+
+                    <Td
+                      align="right"
+                      className="whitespace-nowrap tabular-nums text-slate-500"
+                    >
+                      {formatDate(asset.price_as_of, lang)}
                     </Td>
 
                     <Td align="right" className="tabular-nums">
@@ -545,25 +585,49 @@ export function Holdings() {
                     </Td>
 
                     <Td align="right">
-                      <div
-                        className="relative inline-block"
-                        ref={menuFor === asset.id ? menuRef : null}
-                      >
+                      <div ref={menu?.id === asset.id ? menuRef : null}>
                         <IconButton
                           label={t("hold.actions")}
+                          className="border border-slate-300 bg-white hover:bg-slate-50"
                           disabled={busyId === asset.id}
-                          onClick={() =>
-                            setMenuFor(menuFor === asset.id ? null : asset.id)
-                          }
+                          onClick={(event) => {
+                            if (menu?.id === asset.id) {
+                              setMenu(null);
+                              return;
+                            }
+                            setMenu(anchorMenu(asset.id, event.currentTarget));
+                          }}
                         >
-                          <span aria-hidden="true">⋯</span>
+                          {/* Three dots drawn rather than typed: the glyph is
+                              set at a size and height the surrounding text
+                              decides, which is how a control stops looking
+                              like one. */}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4 fill-current"
+                          >
+                            <circle cx="3" cy="8" r="1.5" />
+                            <circle cx="8" cy="8" r="1.5" />
+                            <circle cx="13" cy="8" r="1.5" />
+                          </svg>
                         </IconButton>
 
-                        {menuFor === asset.id && (
-                          <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg">
+                        {menu?.id === asset.id && (
+                          // Positioned against the viewport so the table's own
+                          // scroll container cannot clip it, and against the
+                          // button's right edge so it can never leave the card.
+                          <div
+                            className="fixed z-40 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg"
+                            style={{
+                              right: menu.right,
+                              top: menu.top,
+                              bottom: menu.bottom,
+                            }}
+                          >
                             <MenuButton
                               onClick={() => {
-                                setMenuFor(null);
+                                setMenu(null);
                                 setEditing(asset);
                                 setFormOpen(true);
                               }}
@@ -580,7 +644,7 @@ export function Holdings() {
                             <MenuButton
                               tone="danger"
                               onClick={() => {
-                                setMenuFor(null);
+                                setMenu(null);
                                 setDeleteTarget(asset);
                               }}
                             >
@@ -626,7 +690,7 @@ export function Holdings() {
       {deleteTarget !== null && (
         <Modal
           open
-          title={t("action.delete")}
+          title={t("hold.delete_title")}
           onClose={() => setDeleteTarget(null)}
           footer={
             <>
@@ -643,7 +707,7 @@ export function Holdings() {
                   void onDelete();
                 }}
               >
-                {t("action.confirm")}
+                {t("hold.delete_action")}
               </Button>
             </>
           }

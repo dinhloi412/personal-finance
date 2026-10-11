@@ -16,6 +16,12 @@ import type {
   CashAccount,
   CashInput,
   CashPatch,
+  Deposit,
+  DepositInput,
+  DepositPatch,
+  DepositRoll,
+  DepositWithdraw,
+  DepositWithdrawn,
   History,
   Market,
   Portfolio,
@@ -140,6 +146,36 @@ export const updateCash = (id: number, patch: CashPatch) =>
 
 export const deleteCash = (id: number) =>
   request<void>(`/cash/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Term deposits (savings)
+// ---------------------------------------------------------------------------
+
+export const listDeposits = (matured?: boolean) => {
+  const query = matured === undefined ? "" : `?matured=${matured}`;
+  return request<Deposit[]>(`/deposits${query}`);
+};
+
+export const createDeposit = (input: DepositInput) =>
+  request<Deposit>("/deposits", { method: "POST", json: input });
+
+export const updateDeposit = (id: number, patch: DepositPatch) =>
+  request<Deposit>(`/deposits/${id}`, { method: "PATCH", json: patch });
+
+export const deleteDeposit = (id: number) =>
+  request<void>(`/deposits/${id}`, { method: "DELETE" });
+
+/** The value from today to maturity, computed by the same arithmetic. */
+export const depositSchedule = (id: number) =>
+  request<Deposit[]>(`/deposits/${id}/schedule`);
+
+/** Roll a matured deposit into a new term: interest becomes principal. */
+export const rollDeposit = (id: number, body: DepositRoll = {}) =>
+  request<Deposit>(`/deposits/${id}/roll`, { method: "POST", json: body });
+
+/** Close a deposit and record the proceeds as cash, in one request. */
+export const withdrawDeposit = (id: number, body: DepositWithdraw = {}) =>
+  request<DepositWithdrawn>(`/deposits/${id}/withdraw`, { method: "POST", json: body });
 
 // ---------------------------------------------------------------------------
 // The portfolio

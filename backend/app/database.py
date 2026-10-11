@@ -13,7 +13,7 @@ import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # backend/ = the parent of app/ (this file is backend/app/database.py)
@@ -92,10 +92,87 @@ def _register_instruments(session: Session, _flush_context, _instances) -> None:
 
 
 def init_db() -> None:
-    """Create any missing tables. Idempotent, called once at startup."""
+    """Create any missing tables, and add any missing columns.
+
+    Creating tables is not enough on its own. `create_all` makes a table that
+    does not exist and does nothing at all to one that does, so the day a
+    column is added to a model, every database that already exists keeps the
+    old shape — and the failure is not a clear one. It is
+    `no such column: valuations.deposit_value`, raised from inside an unrelated
+    request, on a user's machine, in a file they cannot inspect.
+
+    There is no migration history here on purpose: this app has one file, it is
+    the user's, and the honest thing to do with it is add what is missing and
+    touch nothing else. That covers the only kind of change this schema is
+    allowed to make — a new column with a default.
+    """
     from app import models  # noqa: F401  (registers the mappers)
 
     Base.metadata.create_all(bind=engine)
+    add_missing_columns()
+
+
+def add_missing_columns() -> list[str]:
+    """Add columns the models declare and the database does not have.
+
+    A column is only ever ADDED, never altered or dropped, and only when a
+    default can be supplied for the rows already there. Anything else would be
+    a migration, and a migration needs a copy of the file first — which is a
+    conversation to have with the user, not a thing to do silently at startup.
+
+    Returns what it added, which the tests assert on and the log records.
+
+    The inspector is built INSIDE the transaction, after `create_all` may have
+    made a table. An inspector built before that DDL answers from a cached view
+    of the schema and reports the columns of a table that did not exist yet as
+    already present — which is how a function whose whole job is to notice a
+    missing column notices nothing.
+    """
+    added: list[str] = []
+
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            present = {column["name"] for column in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in present:
+                    continue
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table.name} ADD COLUMN "
+                        f"{column.name} {_column_sql(column)}"
+                    )
+                )
+                added.append(f"{table.name}.{column.name}")
+
+    return added
+
+
+def _column_sql(column) -> str:
+    """The SQLite column definition to add `column` with.
+
+    Quoted because a column may be named after a SQL keyword one day, and
+    NOT NULL cannot be used without a default: SQLite refuses to add a NOT NULL
+    column to a table that has rows, which is exactly the table this runs on.
+    """
+    from sqlalchemy import String
+    from sqlalchemy.dialects import sqlite
+
+    type_sql = column.type.compile(dialect=sqlite.dialect())
+    default = column.default.arg if column.default is not None and not column.default.is_callable else None
+
+    if default is not None:
+        literal = f"'{default}'" if isinstance(column.type, String) else str(default)
+        return f"{type_sql} NOT NULL DEFAULT {literal}"
+    if not column.nullable:
+        # No default to give, so the rows already there need something: the
+        # zero of the column's own type. A numeric column added without a value
+        # is 0, which is what "we did not have this figure" means in aggregate.
+        zero = "''" if isinstance(column.type, String) else "0"
+        return f"{type_sql} NOT NULL DEFAULT {zero}"
+    return type_sql
 
 
 def get_db() -> Iterator[Session]:

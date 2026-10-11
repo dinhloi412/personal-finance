@@ -18,6 +18,7 @@ import {
   formatPercent,
   formatQuantity,
   formatRate,
+  formatShare,
   formatSignedMoney,
   known,
   parseDate,
@@ -87,4 +88,22 @@ test("a timestamp is shown with its date", () => {
 
 test("the two currencies are the two the app promises", () => {
   assert.deepEqual(CURRENCIES, ["VND", "USD"]);
+});
+
+test("a share is unsigned, a change is signed", () => {
+  // These are the two things that look alike and are not: a 40% allocation and
+  // a +40% return. The first must never print a plus sign.
+  assert.doesNotMatch(formatShare(40.2, "vi"), /[+−-]/);
+  assert.match(formatPercent(40.2, "vi"), /\+/);
+});
+
+test("a share is one decimal and unknown is a dash", () => {
+  assert.match(formatShare(40.24, "en"), /40\.2%/);
+  assert.equal(formatShare(null, "en"), DASH);
+  assert.equal(formatShare(undefined, "vi"), DASH);
+});
+
+test("a share of zero is zero, not unknown", () => {
+  assert.notEqual(formatShare(0, "en"), DASH);
+  assert.match(formatShare(0, "en"), /0\.0%/);
 });

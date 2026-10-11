@@ -12,7 +12,7 @@ import type { Dict } from "./types";
 export const en: Dict = {
   // -- identity -------------------------------------------------------------
   "app.name": "SoTaiSan",
-  "app.tagline": "Track stocks, funds, crypto and cash",
+  "app.tagline": "Track stocks, funds, crypto, cash and savings",
   "app.offline_note":
     "Your data stays on this machine. Only market prices and exchange rates come from the internet.",
 
@@ -20,6 +20,7 @@ export const en: Dict = {
   "nav.dashboard": "Overview",
   "nav.holdings": "Holdings",
   "nav.cash": "Cash",
+  "nav.savings": "Savings",
   "nav.market": "Market",
   "nav.settings": "Settings",
 
@@ -29,13 +30,10 @@ export const en: Dict = {
   "action.edit": "Edit",
   "action.delete": "Delete",
   "action.confirm": "Confirm",
-  "action.close": "Close",
-  "action.add": "Add",
   "action.refresh": "Refresh",
   "action.retry": "Try again",
   "action.copy": "Copy",
   "action.copied": "Copied",
-  "action.dismiss": "Dismiss",
 
   // -- generic states -------------------------------------------------------
   "state.loading": "Loading…",
@@ -51,12 +49,12 @@ export const en: Dict = {
   "kind.fund": "Fund",
   "kind.crypto": "Crypto",
   "kind.cash": "Cash",
+  "kind.deposit": "Savings",
   "kind.all": "All",
 
   "currency.VND": "VND",
   "currency.USD": "USD",
   "field.currency": "Currency",
-  "field.base_currency": "Display currency",
 
   "lang.vi": "Tiếng Việt",
   "lang.en": "English",
@@ -97,7 +95,6 @@ export const en: Dict = {
     "The total above leaves these out, so what you actually hold is higher.",
   "dash.snapshot": "Record today",
   "dash.snapshot_done": "Today's value has been recorded",
-  "dash.refresh": "Refresh prices and rates",
   "dash.refresh_done": "Updated {count} symbols",
   "dash.refresh_failed": "Could not price: {list}",
   "dash.empty_title": "Nothing tracked yet",
@@ -105,17 +102,20 @@ export const en: Dict = {
     "Start by adding a position on the Holdings page, or writing down a cash balance on the Cash page.",
   "dash.count_assets": "{count} positions",
   "dash.count_cash": "{count} cash accounts",
+  "dash.count_deposits": "{count} term deposits",
+  "dash.allocation_share": "Share",
+  "dash.history_first": "Recorded point",
+  "dash.history_single":
+    "Only one point has been recorded, so there is no line yet. Record one more to see whether your net worth rose or fell.",
 
   // -- positions ------------------------------------------------------------
   "hold.title": "Holdings",
   "hold.add": "Add position",
-  "hold.edit": "Edit position",
   "hold.search": "Search",
   "hold.search_placeholder": "Search by symbol or name",
   "hold.count": "Positions",
   "hold.total": "Total value",
   "hold.symbol": "Symbol",
-  "hold.name": "Name",
   "hold.kind": "Kind",
   "hold.quantity": "Quantity",
   "hold.price": "Price",
@@ -127,6 +127,8 @@ export const en: Dict = {
   "hold.actions": "Actions",
   "hold.price_now": "Fetch a new price",
   "hold.delete_confirm": "Delete the position {symbol}?",
+  "hold.delete_title": "Delete position",
+  "hold.delete_action": "Delete this position",
   "hold.none_title": "Your holdings are empty",
   "hold.none_body":
     "Add your first stock, fund or crypto position. Prices are fetched from the market automatically.",
@@ -135,7 +137,6 @@ export const en: Dict = {
   // -- the position form ----------------------------------------------------
   "form.add_title": "Add a position",
   "form.edit_title": "Edit the position",
-  "form.symbol": "Symbol",
   "form.symbol_hint":
     "For example AAPL, VIC.VN, VWCE.DE, BTC-USD. Search, or just type the symbol.",
   "form.name": "Name",
@@ -157,8 +158,6 @@ export const en: Dict = {
   "pick.no_results": "No matching symbol",
   "pick.degraded":
     "The search feed is unreachable. You can still type the symbol into the field above.",
-  "pick.type_anyway": "Use what I typed",
-  "pick.choose": "Use this symbol",
 
   // -- cash -----------------------------------------------------------------
   "cash.title": "Cash",
@@ -173,6 +172,8 @@ export const en: Dict = {
   "cash.subtotal": "Subtotal per currency",
   "cash.edit_title": "Edit the cash account",
   "cash.delete_confirm": "Delete the cash account {name}?",
+  "cash.delete_title": "Delete cash account",
+  "cash.delete_action": "Delete this account",
   "cash.edit_balance": "Edit the balance",
   "cash.balance_saved": "Balance saved",
   "cash.none_title": "No cash accounts yet",
@@ -180,8 +181,61 @@ export const en: Dict = {
     "Add your first bank account or wallet, with the balance it holds today.",
   "cash.total": "Total converted",
 
+  // -- savings (term deposits) ---------------------------------------------
+  "dep.title": "Savings",
+  "dep.add": "Add a term deposit",
+  "dep.note":
+    "A term deposit: interest is simple, on actual days held over a 365-day year, and is not compounded before maturity — the way the bank pays it.",
+  "dep.bank": "Bank / name",
+  "dep.principal": "Principal",
+  "dep.rate": "Interest rate (% per year)",
+  "dep.rate_unit": "%/yr",
+  "dep.rate_hint": "Write it as the contract does: 6.5 means 6.5% a year.",
+  "dep.start_date": "Start date",
+  "dep.maturity_date": "Maturity date",
+  "dep.maturity_hint":
+    "Leave blank for a demand deposit: no end date, and interest keeps accruing.",
+  "dep.demand": "Demand deposit",
+  "dep.demand_hint": "No maturity date; interest keeps accruing every day.",
+  "dep.term_days": "{days} days",
+  "dep.days_accrued": "Days of interest",
+  "dep.days_remaining": "Remaining",
+  "dep.interest_accrued": "Interest accrued",
+  "dep.interest_at_maturity": "Interest at maturity",
+  "dep.value": "Value today",
+  "dep.value_at_maturity": "Value at maturity",
+  "dep.value_in_base": "Converted",
+  "dep.matured": "Matured",
+  "dep.matured_hint":
+    "Interest stopped on the maturity date. This one needs a decision: roll it over, or take it out.",
+  "dep.accruing": "Accruing",
+  "dep.roll": "Roll over",
+  "dep.roll_title": "Roll over into a new term",
+  "dep.roll_hint":
+    "The interest is added to the principal to make the new deposit. The bank, the rate and the length of the term are kept unless you change them.",
+  "dep.roll_new_principal": "New principal",
+  "dep.roll_new_rate": "New rate (% per year)",
+  "dep.roll_new_maturity": "New maturity date",
+  "dep.roll_done": "The deposit has been rolled over",
+  "dep.withdraw": "Withdraw",
+  "dep.withdraw_title": "Withdraw the deposit",
+  "dep.withdraw_hint":
+    "The deposit is closed and the money becomes a cash balance, in one step.",
+  "dep.withdraw_account": "Record it as this cash account",
+  "dep.withdraw_amount": "Amount received",
+  "dep.withdraw_done": "Withdrawn {amount}",
+  "dep.edit_title": "Edit the term deposit",
+  "dep.delete_confirm": "Delete the deposit {name}?",
+  "dep.none_title": "No term deposits yet",
+  "dep.none_body":
+    "Add a fixed-term deposit to follow its interest accruing day by day.",
+  "dep.subtotal": "By currency",
+  "dep.projection": "Growth to maturity",
+  "dep.projection_empty": "A demand deposit has no maturity to draw towards.",
+  "dep.rate_invalid": "The rate must be between 0 and 100",
+  "dep.dates_invalid": "The maturity date must be after the start date",
+
   // -- market ---------------------------------------------------------------
-  "market.title": "Market",
   "market.prices": "Stored prices",
   "market.prices_note":
     "“Price date” is the session the number belongs to; “fetched” is when the source was last asked. An old price is still usable — as long as you can see that it is old.",
@@ -236,5 +290,4 @@ export const en: Dict = {
     "This app tracks stocks, funds, crypto and cash, in VND and USD.",
   "set.scope_does_not":
     "It has no goals, no advice, no debts, no income or expenses, and no other currency.",
-  "set.save_failed": "Could not save the setting",
 };

@@ -22,11 +22,12 @@ as a dash, and a dash teaches the user nothing about what to do next.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import fx, models, settings_store
+from app import deposits, fx, models, settings_store
 from app.money import (
     MARKET_KINDS,
     AssetKind,
@@ -100,11 +101,13 @@ class Portfolio:
     total: float = 0.0
     market_value: float = 0.0
     cash_value: float = 0.0
+    deposit_value: float = 0.0
     cost_base: float | None = 0.0
     gain: float | None = 0.0
     gain_pct: float | None = None
     assets: list[ValuedAsset] = field(default_factory=list)
     cash: list[ValuedCash] = field(default_factory=list)
+    deposits: list[dict] = field(default_factory=list)
     by_kind: list[dict] = field(default_factory=list)
     by_currency: list[dict] = field(default_factory=list)
     unconverted: list[dict] = field(default_factory=list)
@@ -116,11 +119,13 @@ class Portfolio:
             "total": self.total,
             "market_value": self.market_value,
             "cash_value": self.cash_value,
+            "deposit_value": self.deposit_value,
             "cost_base": self.cost_base,
             "gain": self.gain,
             "gain_pct": self.gain_pct,
             "assets": [asdict(asset) for asset in self.assets],
             "cash": [asdict(account) for account in self.cash],
+            "deposits": self.deposits,
             "by_kind": self.by_kind,
             "by_currency": self.by_currency,
             "unconverted": self.unconverted,
@@ -128,6 +133,7 @@ class Portfolio:
             "counts": {
                 "assets": len(self.assets),
                 "cash": len(self.cash),
+                "deposits": len(self.deposits),
                 "unconverted": len(self.unconverted),
             },
         }
@@ -226,6 +232,27 @@ def value_cash(account: models.CashAccount, converter: fx.Converter) -> ValuedCa
     )
 
 
+def value_term_deposit(
+    row: models.Deposit,
+    converter: fx.Converter,
+    *,
+    as_of: date | None = None,
+) -> dict:
+    """Compute one deposit's interest and express both figures in the base.
+
+    The interest is computed first, in the deposit's own currency, and only
+    then converted — never the other way round, which would apply a rate to the
+    wrong number and call the answer interest.
+    """
+    computed = deposits.value_deposit(row, as_of=as_of).as_dict()
+    value_base = converter.to_base(computed["value"], row.currency)
+    interest_base = converter.to_base(computed["interest_accrued"], row.currency)
+    computed["value_base"] = value_base
+    computed["interest_base"] = interest_base
+    computed["reason"] = None if value_base is not None else REASON_NOT_CONVERTIBLE
+    return computed
+
+
 # --------------------------------------------------------------------------
 # The whole picture
 # --------------------------------------------------------------------------
@@ -250,8 +277,14 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
             select(models.CashAccount).order_by(models.CashAccount.id)
         ).scalars()
     ]
+    terms = [
+        value_term_deposit(row, converter)
+        for row in session.execute(
+            select(models.Deposit).order_by(models.Deposit.id)
+        ).scalars()
+    ]
 
-    result = Portfolio(base_currency=base, assets=assets, cash=cash)
+    result = Portfolio(base_currency=base, assets=assets, cash=cash, deposits=terms)
 
     cost_of_what_is_counted = 0.0
     counted_cost = True
@@ -289,7 +322,20 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
                 }
             )
 
-    result.total = result.market_value + result.cash_value
+    for term in terms:
+        if term["value_base"] is not None:
+            result.deposit_value += term["value_base"]
+        else:
+            result.unconverted.append(
+                {
+                    "kind": "deposit",
+                    "id": term["id"],
+                    "label": f"{term['name']} ({term['currency']})",
+                    "reason": term["reason"],
+                }
+            )
+
+    result.total = result.market_value + result.cash_value + result.deposit_value
 
     # Gain is about the market positions, so cash is not in its cost base.
     if counted_cost and assets:
@@ -305,21 +351,26 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
         result.gain = None
         result.gain_pct = None
 
-    result.by_kind = _by_kind(assets, cash)
-    result.by_currency = _by_currency(assets, cash)
+    result.by_kind = _by_kind(assets, cash, terms)
+    result.by_currency = _by_currency(assets, cash, terms)
     result.rates = converter.report()
     return result
 
 
-def _by_kind(assets: list[ValuedAsset], cash: list[ValuedCash]) -> list[dict]:
+def _by_kind(
+    assets: list[ValuedAsset],
+    cash: list[ValuedCash],
+    deposits: list[dict],
+) -> list[dict]:
     """Value per kind, in a fixed order, including the empty ones.
 
     Empty kinds are kept: a pie chart that silently loses its "crypto" slice
     when crypto is worth nothing looks like a bug, and a legend that says 0 is
     information.
     """
-    totals: dict[str, float] = {kind: 0.0 for kind in (*MARKET_KINDS, "cash")}
-    counts: dict[str, int] = {kind: 0 for kind in (*MARKET_KINDS, "cash")}
+    order: tuple[AssetKind, ...] = (*MARKET_KINDS, "cash", "deposit")
+    totals: dict[str, float] = {kind: 0.0 for kind in order}
+    counts: dict[str, int] = {kind: 0 for kind in order}
 
     for asset in assets:
         counts[asset.kind] = counts.get(asset.kind, 0) + 1
@@ -329,15 +380,22 @@ def _by_kind(assets: list[ValuedAsset], cash: list[ValuedCash]) -> list[dict]:
         counts["cash"] += 1
         if account.value_base is not None:
             totals["cash"] += account.value_base
+    for term in deposits:
+        counts["deposit"] += 1
+        if term["value_base"] is not None:
+            totals["deposit"] += term["value_base"]
 
-    order: tuple[AssetKind, ...] = (*MARKET_KINDS, "cash")
     return [
         {"kind": kind, "value": totals[kind], "count": counts[kind]}
         for kind in order
     ]
 
 
-def _by_currency(assets: list[ValuedAsset], cash: list[ValuedCash]) -> list[dict]:
+def _by_currency(
+    assets: list[ValuedAsset],
+    cash: list[ValuedCash],
+    deposits: list[dict],
+) -> list[dict]:
     """How much of the portfolio is exposed to each currency.
 
     Each row carries BOTH the amount in its own currency (`amount`) and that
@@ -362,6 +420,11 @@ def _by_currency(assets: list[ValuedAsset], cash: list[ValuedCash]) -> list[dict
         code = account.currency
         amount[code] = amount.get(code, 0.0) + account.balance
         converted[code] = converted.get(code, 0.0) + (account.value_base or 0.0)
+
+    for term in deposits:
+        code = term["currency"]
+        amount[code] = amount.get(code, 0.0) + term["value"]
+        converted[code] = converted.get(code, 0.0) + (term["value_base"] or 0.0)
 
     return [
         {
@@ -396,6 +459,7 @@ def write_snapshot(session: Session, *, day: str | None = None) -> models.Valuat
     row.total = picture.total
     row.market_value = picture.market_value
     row.cash_value = picture.cash_value
+    row.deposit_value = picture.deposit_value
     row.cost_value = picture.cost_base
     row.unconverted_count = len(picture.unconverted)
     session.commit()
@@ -424,6 +488,7 @@ def history(session: Session, *, limit: int = 365) -> list[dict]:
             "total": row.total,
             "market_value": row.market_value,
             "cash_value": row.cash_value,
+            "deposit_value": row.deposit_value,
             "cost_value": row.cost_value,
             "unconverted_count": row.unconverted_count,
         }

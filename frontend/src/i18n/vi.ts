@@ -17,7 +17,7 @@ import type { Dict } from "./types";
 export const vi: Dict = {
   // -- identity -------------------------------------------------------------
   "app.name": "Sổ Tài Sản",
-  "app.tagline": "Theo dõi cổ phiếu, quỹ, coin và tiền mặt",
+  "app.tagline": "Theo dõi cổ phiếu, quỹ, coin, tiền mặt và tiết kiệm",
   "app.offline_note":
     "Dữ liệu nằm trên máy của bạn. Chỉ có giá thị trường và tỷ giá được lấy từ internet.",
 
@@ -25,6 +25,7 @@ export const vi: Dict = {
   "nav.dashboard": "Tổng quan",
   "nav.holdings": "Danh mục",
   "nav.cash": "Tiền mặt",
+  "nav.savings": "Tiết kiệm",
   "nav.market": "Thị trường",
   "nav.settings": "Cài đặt",
 
@@ -34,13 +35,10 @@ export const vi: Dict = {
   "action.edit": "Sửa",
   "action.delete": "Xoá",
   "action.confirm": "Xác nhận",
-  "action.close": "Đóng",
-  "action.add": "Thêm",
   "action.refresh": "Cập nhật",
   "action.retry": "Thử lại",
   "action.copy": "Sao chép",
   "action.copied": "Đã sao chép",
-  "action.dismiss": "Bỏ qua",
 
   // -- generic states -------------------------------------------------------
   "state.loading": "Đang tải…",
@@ -56,12 +54,12 @@ export const vi: Dict = {
   "kind.fund": "Quỹ",
   "kind.crypto": "Coin",
   "kind.cash": "Tiền mặt",
+  "kind.deposit": "Tiết kiệm",
   "kind.all": "Tất cả",
 
   "currency.VND": "VNĐ",
   "currency.USD": "USD",
   "field.currency": "Loại tiền",
-  "field.base_currency": "Tiền tệ hiển thị",
 
   "lang.vi": "Tiếng Việt",
   "lang.en": "English",
@@ -102,7 +100,6 @@ export const vi: Dict = {
     "Tổng ở trên không bao gồm các mục này, nên con số thực tế sẽ cao hơn.",
   "dash.snapshot": "Ghi lại hôm nay",
   "dash.snapshot_done": "Đã ghi lại giá trị hôm nay",
-  "dash.refresh": "Cập nhật giá và tỷ giá",
   "dash.refresh_done": "Đã cập nhật {count} mã",
   "dash.refresh_failed": "Không lấy được giá: {list}",
   "dash.empty_title": "Chưa có tài sản nào",
@@ -110,17 +107,20 @@ export const vi: Dict = {
     "Bắt đầu bằng cách thêm một vị thế ở trang Danh mục, hoặc ghi số dư tiền mặt ở trang Tiền mặt.",
   "dash.count_assets": "{count} vị thế",
   "dash.count_cash": "{count} khoản tiền mặt",
+  "dash.count_deposits": "{count} khoản tiết kiệm",
+  "dash.allocation_share": "Tỷ trọng",
+  "dash.history_first": "Mốc đã ghi",
+  "dash.history_single":
+    "Mới có một mốc được ghi nên chưa vẽ thành đường. Ghi thêm một mốc nữa để thấy tài sản tăng hay giảm.",
 
   // -- positions ------------------------------------------------------------
   "hold.title": "Danh mục",
   "hold.add": "Thêm vị thế",
-  "hold.edit": "Sửa vị thế",
   "hold.search": "Tìm kiếm",
   "hold.search_placeholder": "Tìm theo mã hoặc tên",
   "hold.count": "Số vị thế",
   "hold.total": "Tổng giá trị",
   "hold.symbol": "Mã",
-  "hold.name": "Tên",
   "hold.kind": "Loại",
   "hold.quantity": "Khối lượng",
   "hold.price": "Giá",
@@ -132,6 +132,8 @@ export const vi: Dict = {
   "hold.actions": "Thao tác",
   "hold.price_now": "Lấy giá mới",
   "hold.delete_confirm": "Xoá vị thế {symbol}?",
+  "hold.delete_title": "Xoá vị thế",
+  "hold.delete_action": "Xoá vị thế này",
   "hold.none_title": "Danh mục đang trống",
   "hold.none_body":
     "Thêm cổ phiếu, quỹ hoặc coin đầu tiên. Giá sẽ được lấy tự động từ thị trường.",
@@ -140,7 +142,6 @@ export const vi: Dict = {
   // -- the position form ----------------------------------------------------
   "form.add_title": "Thêm vị thế",
   "form.edit_title": "Sửa vị thế",
-  "form.symbol": "Mã / Ticker",
   "form.symbol_hint":
     "Ví dụ: AAPL, VIC.VN, VWCE.DE, BTC-USD. Gõ để tìm, hoặc nhập thẳng mã.",
   "form.name": "Tên",
@@ -162,8 +163,6 @@ export const vi: Dict = {
   "pick.no_results": "Không tìm thấy mã nào",
   "pick.degraded":
     "Không kết nối được nguồn tìm kiếm. Bạn vẫn có thể nhập thẳng mã ở ô trên.",
-  "pick.type_anyway": "Dùng mã đã nhập",
-  "pick.choose": "Chọn mã này",
 
   // -- cash -----------------------------------------------------------------
   "cash.title": "Tiền mặt",
@@ -178,6 +177,8 @@ export const vi: Dict = {
   "cash.subtotal": "Tổng theo loại tiền",
   "cash.edit_title": "Sửa khoản tiền mặt",
   "cash.delete_confirm": "Xoá khoản tiền mặt {name}?",
+  "cash.delete_title": "Xoá khoản tiền mặt",
+  "cash.delete_action": "Xoá khoản này",
   "cash.edit_balance": "Sửa số dư",
   "cash.balance_saved": "Đã lưu số dư",
   "cash.none_title": "Chưa có khoản tiền mặt nào",
@@ -185,8 +186,61 @@ export const vi: Dict = {
     "Thêm tài khoản ngân hàng hoặc ví đầu tiên, kèm số dư hiện tại.",
   "cash.total": "Tổng quy đổi",
 
+  // -- savings (term deposits) ---------------------------------------------
+  "dep.title": "Tiết kiệm",
+  "dep.add": "Thêm khoản tiết kiệm",
+  "dep.note":
+    "Tiền gửi có kỳ hạn: lãi được tính theo số ngày thực gửi trên nền 365 ngày, đơn giản, không ghép lãi trước hạn — đúng như ngân hàng trả.",
+  "dep.bank": "Ngân hàng / tên khoản",
+  "dep.principal": "Số tiền gốc",
+  "dep.rate": "Lãi suất (%/năm)",
+  "dep.rate_unit": "%/năm",
+  "dep.rate_hint": "Ghi đúng như hợp đồng, ví dụ 6,5 cho 6,5% một năm.",
+  "dep.start_date": "Ngày gửi",
+  "dep.maturity_date": "Ngày đáo hạn",
+  "dep.maturity_hint":
+    "Để trống nếu là tiền gửi không kỳ hạn: không có ngày kết thúc và lãi vẫn tiếp tục được tính.",
+  "dep.demand": "Không kỳ hạn",
+  "dep.demand_hint": "Không có ngày đáo hạn, lãi tiếp tục tính mỗi ngày.",
+  "dep.term_days": "{days} ngày",
+  "dep.days_accrued": "Số ngày đã tính lãi",
+  "dep.days_remaining": "Còn lại",
+  "dep.interest_accrued": "Lãi đã tích luỹ",
+  "dep.interest_at_maturity": "Lãi khi đáo hạn",
+  "dep.value": "Giá trị hôm nay",
+  "dep.value_at_maturity": "Giá trị khi đáo hạn",
+  "dep.value_in_base": "Quy đổi",
+  "dep.matured": "Đã đáo hạn",
+  "dep.matured_hint":
+    "Lãi đã dừng lại ở ngày đáo hạn. Bạn cần quyết định tất toán hay gửi lại.",
+  "dep.accruing": "Đang tích luỹ",
+  "dep.roll": "Gửi lại",
+  "dep.roll_title": "Tất toán và gửi lại",
+  "dep.roll_hint":
+    "Lãi sẽ được cộng vào gốc thành khoản mới. Mặc định giữ nguyên ngân hàng, lãi suất và độ dài kỳ hạn.",
+  "dep.roll_new_principal": "Gốc mới",
+  "dep.roll_new_rate": "Lãi suất mới (%/năm)",
+  "dep.roll_new_maturity": "Ngày đáo hạn mới",
+  "dep.roll_done": "Đã gửi lại khoản tiết kiệm",
+  "dep.withdraw": "Tất toán",
+  "dep.withdraw_title": "Tất toán khoản tiết kiệm",
+  "dep.withdraw_hint":
+    "Khoản tiết kiệm sẽ được đóng lại và số tiền chuyển thành một khoản tiền mặt, trong cùng một bước.",
+  "dep.withdraw_account": "Ghi vào khoản tiền mặt",
+  "dep.withdraw_amount": "Số tiền nhận được",
+  "dep.withdraw_done": "Đã tất toán {amount}",
+  "dep.edit_title": "Sửa khoản tiết kiệm",
+  "dep.delete_confirm": "Xoá khoản tiết kiệm {name}?",
+  "dep.none_title": "Chưa có khoản tiết kiệm nào",
+  "dep.none_body":
+    "Thêm một khoản gửi có kỳ hạn để theo dõi lãi tích luỹ theo từng ngày.",
+  "dep.subtotal": "Theo loại tiền",
+  "dep.projection": "Diễn biến đến ngày đáo hạn",
+  "dep.projection_empty": "Khoản không kỳ hạn không có ngày đáo hạn để vẽ tới.",
+  "dep.rate_invalid": "Lãi suất phải từ 0 đến 100",
+  "dep.dates_invalid": "Ngày đáo hạn phải sau ngày gửi",
+
   // -- market ---------------------------------------------------------------
-  "market.title": "Thị trường",
   "market.prices": "Giá đã lưu",
   "market.prices_note":
     "“Ngày giá” là phiên giao dịch mà con số thuộc về; “lấy lúc” là lần cuối hỏi nguồn. Giá cũ vẫn dùng được, miễn là biết nó cũ.",
@@ -241,5 +295,4 @@ export const vi: Dict = {
     "Ứng dụng theo dõi: cổ phiếu, quỹ, coin và tiền mặt — với hai loại tiền VNĐ và USD.",
   "set.scope_does_not":
     "Ứng dụng không có: mục tiêu tài chính, tư vấn, nợ, thu chi, hay bất kỳ loại tiền nào khác.",
-  "set.save_failed": "Không lưu được cài đặt",
 };

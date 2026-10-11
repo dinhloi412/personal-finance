@@ -36,6 +36,12 @@ def get_or_404(db: Session, model: type[T], identifier: object, what: str) -> T:
     return row
 
 
+#: 422, spelled out. The named constant in this version of Starlette is
+#: deprecated in favour of "CONTENT", and the number is the one thing that does
+#: not change between the two spellings.
+UNPROCESSABLE = 422
+
+
 def refused(message: str) -> HTTPException:
     """A refused value is a 422: the request was wrong, the server is not."""
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message)
+    return HTTPException(status_code=UNPROCESSABLE, detail=message)

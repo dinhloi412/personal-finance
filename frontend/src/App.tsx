@@ -21,16 +21,34 @@ import { Cash } from "./views/Cash";
 import { Dashboard } from "./views/Dashboard";
 import { Holdings } from "./views/Holdings";
 import { Market } from "./views/Market";
+import { Savings } from "./views/Savings";
 import { Settings } from "./views/Settings";
 
-type Route = "dashboard" | "holdings" | "cash" | "market" | "settings";
+type Route =
+  | "dashboard"
+  | "holdings"
+  | "cash"
+  | "savings"
+  | "market"
+  | "settings";
 
-const ROUTES: Route[] = ["dashboard", "holdings", "cash", "market", "settings"];
+/** The order the pages are listed in, which is the order they are used in:
+ * what the market prices, what the bank holds, what is left over, then the
+ * reference pages. */
+const ROUTES: Route[] = [
+  "dashboard",
+  "holdings",
+  "cash",
+  "savings",
+  "market",
+  "settings",
+];
 
 const PATHS: Record<Route, string> = {
   dashboard: "/",
   holdings: "/holdings",
   cash: "/cash",
+  savings: "/savings",
   market: "/market",
   settings: "/settings",
 };
@@ -54,6 +72,58 @@ export function App() {
         <Shell />
       </AppProvider>
     </I18nProvider>
+  );
+}
+
+/**
+ * What the last refresh did.
+ *
+ * The refresh button lives in the header, which is the right place for it and
+ * the wrong place to show a per-symbol failure — a price feed that answered
+ * for nineteen symbols and not the twentieth is not an error page, it is one
+ * row of news. So the report is kept in the context and shown here, where
+ * there is room for it and where it can be dismissed.
+ */
+function RefreshReport() {
+  const { t } = useI18n();
+  const app = useApp();
+  const report = app.lastRefresh;
+
+  if (report === null) return null;
+
+  const failures = report.prices.failed;
+  const rateFailed = !report.fx.ok;
+
+  if (failures.length === 0 && !rateFailed) {
+    return (
+      <Notice tone="info" onDismiss={app.clearRefresh}>
+        {t("dash.refresh_done", { count: report.prices.refreshed.length })}
+      </Notice>
+    );
+  }
+
+  return (
+    <Notice
+      tone={failures.length > 0 ? "warning" : "error"}
+      title={
+        failures.length > 0
+          ? t("dash.refresh_failed", {
+              list: failures.map((failure) => failure.symbol).join(", "),
+            })
+          : t("market.refresh_error")
+      }
+      onDismiss={app.clearRefresh}
+    >
+      <ul className="space-y-1">
+        {failures.map((failure) => (
+          <li key={failure.symbol} className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium">{failure.symbol}</span>
+            <span>{failure.error}</span>
+          </li>
+        ))}
+        {rateFailed && <li>{report.fx.error ?? t("market.refresh_error")}</li>}
+      </ul>
+    </Notice>
   );
 }
 
@@ -133,6 +203,8 @@ function Shell() {
           </Notice>
         )}
 
+        <RefreshReport />
+
         {app.loading && app.portfolio === null ? (
           <Spinner label={t("state.loading")} />
         ) : (
@@ -140,6 +212,7 @@ function Shell() {
             {route === "dashboard" && <Dashboard />}
             {route === "holdings" && <Holdings />}
             {route === "cash" && <Cash />}
+            {route === "savings" && <Savings />}
             {route === "market" && <Market />}
             {route === "settings" && <Settings />}
           </>
