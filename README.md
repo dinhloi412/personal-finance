@@ -3,9 +3,9 @@
 A small, self-hosted tracker for **what you own and what it is worth**.
 
 Inspired by [aurelio-finance](https://github.com/LosaLosSantos/aurelio-finance),
-reduced to one job. Five things can be tracked — **stocks, funds, crypto, cash,
-and term deposits (savings)** — in **VND and USD**, read in **Vietnamese or
-English**. That is the whole feature list; see [Scope](#scope) for what was
+reduced to one job. Six things can be tracked — **stocks, funds, crypto, cash,
+term deposits (savings), and gold** — in **VND and USD**, read in **Vietnamese
+or English**. That is the whole feature list; see [Scope](#scope) for what was
 deliberately left out.
 
 ![Overview](docs/overview.svg)
@@ -37,7 +37,7 @@ relative paths and there is no CORS surface in either mode.
 ### Tests
 
 ```bash
-cd backend  && uv run pytest      # 170 tests, no network access
+cd backend  && uv run pytest      # 248 tests, no network access
 cd frontend && pnpm test          # 23 tests: formatters, dictionaries, layout
 
 # and, against a running server with the real network:
@@ -66,6 +66,15 @@ rather than invented.
 number in place, in one action, and the date it was written down is stamped
 alongside it. This is intentional: a ledger nobody maintains is worse than a
 balance everybody updates.
+
+**Gold** — Vietnamese gold, priced the way it is actually bought and sold: by
+the **chỉ**, at **Bảo Tín Minh Châu's published price** for the exact product
+line you hold. Vietnamese gold does not follow the world price — SJC bars and
+rings carry a domestic premium, and that premium is most of the money — so the
+app reads a Vietnamese shop rather than a world feed. Each holding says which of
+the shop's two prices it uses, because the shop buys at one and sells at the
+other and valuing gold at the selling price shows a profit on gold bought a
+moment ago.
 
 **Savings** — term deposits: the bank, the principal, the rate the contract
 quotes, and the term. You do not retype its value, because the app can work it
@@ -106,11 +115,21 @@ Three rules, each of which is enforced in code and covered by tests:
    is simple, on actual days held over a 365-day year, and stops at maturity —
    not compounded daily, which would overstate every figure by about 1.4 % and
    would not match the bank's own statement.
+5. **A price is per unit, and the unit travels with it.** Gold is quoted per
+   lượng by a shop and held in chỉ, and a price divided by the wrong weight is
+   wrong by a factor of ten. So the unit is parsed from the shop's own product
+   name, normalised to one unit, and a line whose weight cannot be read is
+   dropped rather than guessed at — and the page shows both the shop's published
+   figure and the price per unit held.
 
 ## Supported symbols
 
 **Listed** (Yahoo Finance tickers): `AAPL` (US), `VIC.VN` and `FPT.VN` (HOSE),
 `VWCE.DE` (Xetra), `BTC-USD` and `BTC-EUR` (crypto pairs), `VOO` (US ETF).
+
+**Vietnamese gold** (Bảo Tín Minh Châu, per chỉ): any of the shop's published
+lines — `VÀNG MIẾNG SJC`, `NHẪN TRÒN TRƠN`, `VÀNG NGUYÊN LIỆU`, `TRANG SỨC` —
+picked from a list rather than typed.
 
 **Open-ended Vietnamese funds** (Fmarket NAV): `VNDAF`, `VESAF`, `VFF`, `VEOF`,
 `DCDE`, `DCDS`, `DCBF`, `DCIP` and about sixty more. A few of Dragon Capital's
@@ -138,6 +157,8 @@ currency you told the app you do not hold. Prefer a VND- or USD-quoted listing
 
 Deliberately **not** here, in contrast to the project this was reduced from:
 
+- the world gold price, or silver — this tracks Vietnamese gold at a Vietnamese
+  shop's price
 - interest payment schedules other than "at maturity" (coupons, monthly payouts)
 - goals, targets, planning, accumulation plans
 - any AI advisor, chat, or agent — no OpenRouter, no MCP, no web search
@@ -159,17 +180,20 @@ backend/app/
   market.py         Yahoo Finance: what a symbol is, what it closed at
   fx.py             rates, and the rule that keeps a total honest
   deposits.py       term deposits: the interest arithmetic, in one place
+  gold.py           Vietnamese gold: the shop's payload, the units, the prices
+  net.py            one HTTPS helper, because one feed needs certifi
+  funds.py          open-ended funds: NAVs from Fmarket, and the alias table
   valuation.py      what it is all worth, in one currency
   pricing.py        refreshing, and reporting per-symbol failures
   settings_store.py the display currency and the language
-  routers/          assets, cash, deposits, portfolio, market, settings
+  routers/          assets, cash, deposits, gold, portfolio, market, settings
 
 frontend/src/
   api/              one function per endpoint, and the types it returns
   i18n/             the dictionaries, t(), and every formatter
   state/            the shared settings/portfolio state
   components/       the interface kit and the symbol picker
-  views/            Overview, Holdings, Cash, Savings, Market, Settings
+  views/            Overview, Holdings, Cash, Savings, Gold, Market, Settings
 ```
 
 ## Documentation

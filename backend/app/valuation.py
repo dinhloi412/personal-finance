@@ -27,7 +27,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deposits, fx, models, settings_store
+from app import deposits, fx, gold as gold_prices, models, settings_store
 from app.money import (
     MARKET_KINDS,
     AssetKind,
@@ -94,6 +94,41 @@ class ValuedCash:
 
 
 @dataclass
+class ValuedGold:
+    """One gold holding: a weight, a shop's price, and the value of both.
+
+    The shop's published price is kept beside the derived one on purpose. The
+    shop quotes a price for a *product line* — per lượng for a bar, per chỉ for
+    raw gold — and what a person holds is a number of chỉ, so the interface has
+    to be able to show both without either being mistaken for the other.
+    """
+
+    id: int
+    name: str
+    currency: str
+    quantity: float
+    unit: str
+    pricing: str
+    note: str | None
+
+    #: The goldshop line this follows, and what it is called today.
+    product_key: str
+    product_name: str | None
+    #: The shop's own figure for one unit of its product, in VND.
+    shop_price: float | None
+    #: Price for ONE `unit` of this holding, in VND.
+    price: float | None
+    #: The day the shop's price is for.
+    price_as_of: str | None
+    price_source: str | None
+
+    value: float | None
+    value_base: float | None
+    cost_basis: float | None
+    reason: str | None = None
+
+
+@dataclass
 class Portfolio:
     """The whole picture: a total, its parts, and what is missing from it."""
 
@@ -102,12 +137,14 @@ class Portfolio:
     market_value: float = 0.0
     cash_value: float = 0.0
     deposit_value: float = 0.0
+    gold_value: float = 0.0
     cost_base: float | None = 0.0
     gain: float | None = 0.0
     gain_pct: float | None = None
     assets: list[ValuedAsset] = field(default_factory=list)
     cash: list[ValuedCash] = field(default_factory=list)
     deposits: list[dict] = field(default_factory=list)
+    gold: list[ValuedGold] = field(default_factory=list)
     by_kind: list[dict] = field(default_factory=list)
     by_currency: list[dict] = field(default_factory=list)
     unconverted: list[dict] = field(default_factory=list)
@@ -120,12 +157,14 @@ class Portfolio:
             "market_value": self.market_value,
             "cash_value": self.cash_value,
             "deposit_value": self.deposit_value,
+            "gold_value": self.gold_value,
             "cost_base": self.cost_base,
             "gain": self.gain,
             "gain_pct": self.gain_pct,
             "assets": [asdict(asset) for asset in self.assets],
             "cash": [asdict(account) for account in self.cash],
             "deposits": self.deposits,
+            "gold": [asdict(holding) for holding in self.gold],
             "by_kind": self.by_kind,
             "by_currency": self.by_currency,
             "unconverted": self.unconverted,
@@ -134,6 +173,7 @@ class Portfolio:
                 "assets": len(self.assets),
                 "cash": len(self.cash),
                 "deposits": len(self.deposits),
+                "gold": len(self.gold),
                 "unconverted": len(self.unconverted),
             },
         }
@@ -253,6 +293,90 @@ def value_term_deposit(
     return computed
 
 
+def value_gold_holding(
+    row: models.Gold,
+    converter: fx.Converter,
+    *,
+    shop: gold_prices.GoldPrice | None = None,
+    error: str | None = None,
+) -> ValuedGold:
+    """Value one gold holding at the shop's price for its product line.
+
+    The arithmetic is deliberately dull: the shop's price is per ONE unit of
+    its product, normalised to chỉ by `app.gold`; the holding is a number of
+    chỉ; the product is the value. What is worth being careful about is the two
+    ways this can be wrong — using the sell price as though it were what you
+    would get, and letting a missing price become a zero.
+    """
+    as_of: str | None = None
+    price: float | None = None
+    shop_price: float | None = None
+    product_name: str | None = None
+    reason: str | None = None
+
+    if shop is None:
+        # The product is gone from the shop's list, or the list could not be
+        # fetched. Either way the value is unknown, which is not zero.
+        reason = "no_shop_price" if error is None else "price_list_unreachable"
+    else:
+        product_name = shop.name
+        shop_price = shop.price(row.pricing)
+        # The shop normalises to chỉ already; a holding kept in another unit is
+        # still a weight, so the ratio is exact and needs no rate.
+        price = shop_price * gold_prices.GRAMS_PER_UNIT[row.unit] / gold_prices.GRAMS_PER_UNIT["chi"] \
+            if row.unit in gold_prices.GRAMS_PER_UNIT else None
+        as_of = gold_prices.updated_on(shop)
+        if price is None:
+            reason = "no_shop_price"
+
+    value: float | None = None
+    value_base: float | None = None
+    if reason is None and price is not None:
+        value = float(row.quantity) * price
+        value_base = converter.to_base(value, gold_prices.VND)
+        if value_base is None:
+            reason = "not_convertible"
+
+    cost_base = (
+        converter.to_base(row.cost_basis, row.currency)
+        if row.cost_basis is not None
+        else None
+    )
+
+    return ValuedGold(
+        id=row.id,
+        name=row.name,
+        currency=row.currency,
+        quantity=float(row.quantity),
+        unit=row.unit,
+        pricing=row.pricing,
+        note=row.note,
+        product_key=row.product_key,
+        product_name=product_name,
+        shop_price=shop_price,
+        price=price,
+        price_as_of=as_of,
+        price_source="shop" if shop is not None else None,
+        value=value,
+        value_base=value_base,
+        cost_basis=row.cost_basis,
+        reason=reason,
+    )
+
+
+def gold_shop_prices(*, fresh: bool = False) -> tuple[dict[str, gold_prices.GoldPrice], str | None]:
+    """Every gold line the shop publishes, keyed, or the reason there is none.
+
+    Fetched once for the whole portfolio: every gold holding prices off the same
+    list, so asking per holding would ask the same question several times and
+    could answer differently each time.
+    """
+    try:
+        return {product.key: product for product in gold_prices.prices(fresh=fresh)}, None
+    except gold_prices.GoldError as cause:
+        return {}, str(cause)
+
+
 # --------------------------------------------------------------------------
 # The whole picture
 # --------------------------------------------------------------------------
@@ -284,7 +408,20 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
         ).scalars()
     ]
 
-    result = Portfolio(base_currency=base, assets=assets, cash=cash, deposits=terms)
+    shop, shop_error = gold_shop_prices()
+    gold = [
+        value_gold_holding(
+            row,
+            converter,
+            shop=shop.get(row.product_key),
+            error=shop_error,
+        )
+        for row in session.execute(select(models.Gold).order_by(models.Gold.id)).scalars()
+    ]
+
+    result = Portfolio(
+        base_currency=base, assets=assets, cash=cash, deposits=terms, gold=gold
+    )
 
     cost_of_what_is_counted = 0.0
     counted_cost = True
@@ -335,7 +472,25 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
                 }
             )
 
-    result.total = result.market_value + result.cash_value + result.deposit_value
+    for holding in gold:
+        if holding.value_base is not None:
+            result.gold_value += holding.value_base
+        else:
+            result.unconverted.append(
+                {
+                    "kind": "gold",
+                    "id": holding.id,
+                    "label": f"{holding.name} ({holding.quantity:g} {holding.unit})",
+                    "reason": holding.reason,
+                }
+            )
+
+    result.total = (
+        result.market_value
+        + result.cash_value
+        + result.deposit_value
+        + result.gold_value
+    )
 
     # Gain is about the market positions, so cash is not in its cost base.
     if counted_cost and assets:
@@ -351,8 +506,8 @@ def portfolio(session: Session, *, base: str | None = None) -> Portfolio:
         result.gain = None
         result.gain_pct = None
 
-    result.by_kind = _by_kind(assets, cash, terms)
-    result.by_currency = _by_currency(assets, cash, terms)
+    result.by_kind = _by_kind(assets, cash, terms, gold)
+    result.by_currency = _by_currency(assets, cash, terms, gold)
     result.rates = converter.report()
     return result
 
@@ -361,6 +516,7 @@ def _by_kind(
     assets: list[ValuedAsset],
     cash: list[ValuedCash],
     deposits: list[dict],
+    gold: list[ValuedGold],
 ) -> list[dict]:
     """Value per kind, in a fixed order, including the empty ones.
 
@@ -368,7 +524,7 @@ def _by_kind(
     when crypto is worth nothing looks like a bug, and a legend that says 0 is
     information.
     """
-    order: tuple[AssetKind, ...] = (*MARKET_KINDS, "cash", "deposit")
+    order: tuple[AssetKind, ...] = (*MARKET_KINDS, "cash", "deposit", "gold")
     totals: dict[str, float] = {kind: 0.0 for kind in order}
     counts: dict[str, int] = {kind: 0 for kind in order}
 
@@ -384,6 +540,10 @@ def _by_kind(
         counts["deposit"] += 1
         if term["value_base"] is not None:
             totals["deposit"] += term["value_base"]
+    for holding in gold:
+        counts["gold"] += 1
+        if holding.value_base is not None:
+            totals["gold"] += holding.value_base
 
     return [
         {"kind": kind, "value": totals[kind], "count": counts[kind]}
@@ -395,6 +555,7 @@ def _by_currency(
     assets: list[ValuedAsset],
     cash: list[ValuedCash],
     deposits: list[dict],
+    gold: list[ValuedGold],
 ) -> list[dict]:
     """How much of the portfolio is exposed to each currency.
 
@@ -425,6 +586,13 @@ def _by_currency(
         code = term["currency"]
         amount[code] = amount.get(code, 0.0) + term["value"]
         converted[code] = converted.get(code, 0.0) + (term["value_base"] or 0.0)
+
+    for holding in gold:
+        # Gold is quoted by a Vietnamese shop, so its exposure is in dong even
+        # when the holding was bought with dollars.
+        code = gold_prices.VND
+        amount[code] = amount.get(code, 0.0) + (holding.value or 0.0)
+        converted[code] = converted.get(code, 0.0) + (holding.value_base or 0.0)
 
     return [
         {
@@ -460,6 +628,7 @@ def write_snapshot(session: Session, *, day: str | None = None) -> models.Valuat
     row.market_value = picture.market_value
     row.cash_value = picture.cash_value
     row.deposit_value = picture.deposit_value
+    row.gold_value = picture.gold_value
     row.cost_value = picture.cost_base
     row.unconverted_count = len(picture.unconverted)
     session.commit()
@@ -489,6 +658,7 @@ def history(session: Session, *, limit: int = 365) -> list[dict]:
             "market_value": row.market_value,
             "cash_value": row.cash_value,
             "deposit_value": row.deposit_value,
+            "gold_value": row.gold_value,
             "cost_value": row.cost_value,
             "unconverted_count": row.unconverted_count,
         }

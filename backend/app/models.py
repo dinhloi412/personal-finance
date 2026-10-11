@@ -26,7 +26,7 @@ from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.money import DEFAULT_INTEREST_MODE
+from app.money import DEFAULT_INTEREST_MODE, GOLD_PRICING_BUY
 
 
 def utcnow_iso() -> str:
@@ -174,6 +174,46 @@ class Deposit(Base):
     __table_args__ = (Index("ix_deposits_maturity", "maturity_date"),)
 
 
+class Gold(Base):
+    """A weight of Vietnamese gold, priced by the shop it would be sold to.
+
+    Its own table because it is its own kind of thing: no symbol to quote, no
+    issuer, no manager, no NAV. A quantity of metal, the unit it is kept in,
+    and a product line at a goldshop whose price it follows.
+
+    The price is not the world price. SJC bars and 9999 rings trade at a
+    domestic premium fixed by supply and by the State Bank's import rules, and
+    that premium is where most of the money is. So a holding points at a
+    product the shop publishes — `vang-mieng-sjc-vang-sjc` — and is valued at
+    that product's own price, converted from the shop's unit to the one held.
+
+    `pricing` says which of the shop's two prices to use, and it is a stored
+    choice rather than a default buried in code: `buy` is what the shop pays
+    you today, `sell` is what it charges. Valuing gold at the sell price shows
+    a profit on gold bought a moment ago.
+    """
+
+    __tablename__ = "gold"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    currency: Mapped[str] = mapped_column(String, nullable=False)  # Currency
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String, nullable=False)  # GoldUnit
+    #: The goldshop line this holding follows, as `gold.normalise_key` makes it.
+    #: A key rather than a display name, because the shop edits its names.
+    product_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    #: `buy` or `sell` — see the class docstring.
+    pricing: Mapped[str] = mapped_column(
+        String, nullable=False, default=GOLD_PRICING_BUY
+    )
+    #: Total paid, in `currency` — the same meaning it has on a position.
+    cost_basis: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, default=utcnow_iso, nullable=False)
+
+
 class PriceCache(Base):
     """The last quote seen for a symbol, and the close it is for.
 
@@ -246,6 +286,7 @@ class Valuation(Base):
     market_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     cash_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     deposit_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    gold_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # What the parts cost, in the same base, so the chart can show gain over
     # time without re-reading every position's cost basis as it is today.
     cost_value: Mapped[float | None] = mapped_column(Float, nullable=True)

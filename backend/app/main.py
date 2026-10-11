@@ -25,7 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import __version__, fx
 from app.database import SessionLocal, init_db
 from app.money import BASE_CURRENCIES
-from app.routers import assets, cash, deposits, market, portfolio, settings
+from app.routers import assets, cash, deposits, gold, market, portfolio, settings
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(assets.router)
     app.include_router(cash.router)
     app.include_router(deposits.router)
+    app.include_router(gold.router)
     app.include_router(portfolio.router)
     app.include_router(market.router)
 

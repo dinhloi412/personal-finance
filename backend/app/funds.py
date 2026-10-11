@@ -41,6 +41,7 @@ import time
 import urllib.request
 from dataclasses import dataclass
 
+from app import net
 from app.money import Currency
 
 #: The two product families Fmarket publishes. Both are "funds this app can
@@ -147,7 +148,7 @@ def _post(path: str, payload: dict) -> dict:
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+    with net.open_url(request, timeout=TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -171,7 +172,7 @@ def _fetch_product(product_id: int) -> dict:
         f"{BASE_URL}/products/{product_id}",
         headers={"Accept": "application/json", "User-Agent": USER_AGENT},
     )
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+    with net.open_url(request, timeout=TIMEOUT_SECONDS) as response:
         body = json.loads(response.read().decode("utf-8"))
     return dict(body.get("data") or {})
 

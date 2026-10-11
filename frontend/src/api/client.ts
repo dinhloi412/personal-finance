@@ -22,6 +22,10 @@ import type {
   DepositRoll,
   DepositWithdraw,
   DepositWithdrawn,
+  GoldHolding,
+  GoldInput,
+  GoldPatch,
+  GoldProducts,
   History,
   Market,
   Portfolio,
@@ -176,6 +180,30 @@ export const rollDeposit = (id: number, body: DepositRoll = {}) =>
 /** Close a deposit and record the proceeds as cash, in one request. */
 export const withdrawDeposit = (id: number, body: DepositWithdraw = {}) =>
   request<DepositWithdrawn>(`/deposits/${id}/withdraw`, { method: "POST", json: body });
+
+// ---------------------------------------------------------------------------
+// Gold (Vietnamese, priced by the shop)
+// ---------------------------------------------------------------------------
+
+/** Every line the goldshop publishes, normalised to a price per chỉ. */
+export const listGoldProducts = (query?: string, fresh = false) => {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (fresh) params.set("fresh", "true");
+  const suffix = params.toString();
+  return request<GoldProducts>(`/gold/products${suffix ? `?${suffix}` : ""}`);
+};
+
+export const listGold = () => request<GoldHolding[]>("/gold");
+
+export const createGold = (input: GoldInput) =>
+  request<GoldHolding>("/gold", { method: "POST", json: input });
+
+export const updateGold = (id: number, patch: GoldPatch) =>
+  request<GoldHolding>(`/gold/${id}`, { method: "PATCH", json: patch });
+
+export const deleteGold = (id: number) =>
+  request<void>(`/gold/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
 // The portfolio

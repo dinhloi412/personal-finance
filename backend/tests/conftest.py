@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # schema.
 os.environ["DATABASE_URL"] = "sqlite://"
 
-from app import funds, fx, market, models, pricing  # noqa: E402
+from app import funds, fx, gold, market, models, pricing  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -114,6 +114,42 @@ def fake_fund_catalogue() -> list[dict]:
         }
         for code, (_id, nav, name, as_of) in FUNDS.items()
     ]
+
+
+#: The goldshop's price list, as `app.gold.parse_payload` would read it from the
+#: real payload: one-key objects suffixed with the row number, a weight in the
+#: product's own name, and prices in VND for that whole weight.
+#:
+#: The names and figures are the shop's real ones from 2026-10-11. They are kept
+#: verbatim — accents, parentheses and all — because the parsing being tested is
+#: exactly the parsing of that mess.
+GOLD_ROWS: list[tuple[str, str, str]] = [
+    # name                                                    mua          bán
+    ("VÀNG MIẾNG SJC (Vàng SJC)", "14100000", "14480000"),
+    ("NHẪN TRÒN TRƠN (Vàng Rồng Thăng Long)", "13960000", "14360000"),
+    ("VÀNG NGUYÊN LIỆU (Vàng thị trường)", "13290000", "0"),
+    # The real coin line, whose name states no unit. It is in the fixture on
+    # purpose: it is the line that taught the parser to refuse a weight it
+    # cannot read rather than to assume one.
+    ("ĐỒNG XU VRTL 0.1 (Vàng Rồng Thăng Long)", "1396000", "1436000"),
+    ("BẠC THỎI 2025 ANCARAT 999 1 KG (1000 GRAM)", "55176000", "56886000"),
+]
+
+
+def fake_gold_payload() -> dict:
+    """The shop's payload shape, including a silver line to be filtered out."""
+    rows = []
+    for index, (name, buy, sell) in enumerate(GOLD_ROWS, start=1):
+        rows.append(
+            {
+                "@row": str(index),
+                f"@n_{index}": name,
+                f"@pb_{index}": buy,
+                f"@ps_{index}": sell,
+                f"@d_{index}": "11/10/2026 10:42",
+            }
+        )
+    return {"DataList": {"Data": rows}}
 
 
 #: What the fake feed publishes: units of each currency per 1 USD.
@@ -203,9 +239,12 @@ def no_network(monkeypatch):
             (row for row in fake_fund_catalogue() if row["id"] == product_id), {}
         ),
     )
+    monkeypatch.setattr(gold, "_fetch_prices", fake_gold_payload)
     funds.forget_catalogue()
+    gold.forget_cache()
     yield
     funds.forget_catalogue()
+    gold.forget_cache()
 
 
 @pytest.fixture

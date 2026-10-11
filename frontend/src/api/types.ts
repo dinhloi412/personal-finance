@@ -19,7 +19,12 @@ export type MarketKind = "stock" | "fund" | "crypto";
 /** Everything that makes up the net worth, including the two kinds with no
  * market behind them: cash, which the user counts, and a term deposit, whose
  * value is computed from its own terms. */
-export type AssetKind = MarketKind | "cash" | "deposit";
+export type AssetKind = MarketKind | "cash" | "deposit" | "gold";
+/** The weights gold is held in. A lượng is ten chỉ, by definition. */
+export type GoldUnit = "chi" | "luong" | "gram" | "ounce";
+/** Which of a goldshop's two prices a holding is valued at. The shop buys at
+ * one and sells at the other, and the gap between them is real money. */
+export type GoldPricing = "buy" | "sell";
 /** The only interest behaviour implemented, so the type says so rather than
  * offering a choice that would do nothing. */
 export type InterestMode = "at_maturity";
@@ -30,7 +35,12 @@ export type UnpricedReason =
   | "unpriced"
   | "not_convertible"
   | "no_quantity"
-  | "no_cost";
+  | "no_cost"
+  /** Gold only: the product line this holding follows is no longer in the
+   * goldshop's price list. */
+  | "no_shop_price"
+  /** Gold only: the goldshop's price list could not be fetched at all. */
+  | "price_list_unreachable";
 
 export interface Settings {
   base_currency: Currency;
@@ -187,18 +197,79 @@ export interface DepositWithdrawn {
   amount: number;
 }
 
+export interface GoldProduct {
+  key: string;
+  name: string;
+  /** Price for ONE unit (a chỉ) at which the shop buys. */
+  buy: number;
+  /** Price for ONE unit at which the shop sells. */
+  sell: number;
+  unit: string;
+  /** The shop's own timestamp, as text, exactly as it published it. */
+  updated_at: string;
+  updated_on: string;
+}
+
+export interface GoldProducts {
+  products: GoldProduct[];
+  /** True when the shop could not be reached: an empty list would otherwise
+   * read as "no gold exists", which is a different fact. */
+  degraded: boolean;
+  error: string | null;
+  source: string;
+}
+
+export interface GoldHolding {
+  id: number;
+  name: string;
+  currency: Currency;
+  quantity: number;
+  unit: GoldUnit;
+  pricing: GoldPricing;
+  note: string | null;
+
+  product_key: string;
+  product_name: string | null;
+  /** The shop's figure for its own product line, in VND. */
+  shop_price: number | null;
+  /** That figure expressed for ONE unit of the unit held, in VND. */
+  price: number | null;
+  price_as_of: string | null;
+  price_source: string | null;
+
+  value: number | null;
+  value_base: number | null;
+  cost_basis: number | null;
+  reason: UnpricedReason | null;
+}
+
+export interface GoldInput {
+  name: string;
+  currency: Currency;
+  quantity: number;
+  unit: GoldUnit;
+  product_key: string;
+  pricing: GoldPricing;
+  cost_basis?: number | null;
+  note?: string | null;
+}
+
+export type GoldPatch = Partial<GoldInput>;
+
 export interface Portfolio {
   base_currency: Currency;
   total: number;
   market_value: number;
   cash_value: number;
   deposit_value: number;
+  gold_value: number;
   cost_base: number | null;
   gain: number | null;
   gain_pct: number | null;
   assets: Asset[];
   cash: CashAccount[];
   deposits: Deposit[];
+  gold: GoldHolding[];
   by_kind: KindTotal[];
   by_currency: CurrencyTotal[];
   unconverted: Unconverted[];
@@ -207,6 +278,7 @@ export interface Portfolio {
     assets: number;
     cash: number;
     deposits: number;
+    gold: number;
     unconverted: number;
   };
 }
@@ -218,6 +290,7 @@ export interface ValuationPoint {
   market_value: number;
   cash_value: number;
   deposit_value: number;
+  gold_value: number;
   cost_value: number | null;
   unconverted_count: number;
 }

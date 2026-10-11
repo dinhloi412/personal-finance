@@ -21,6 +21,7 @@ export const en: Dict = {
   "nav.holdings": "Holdings",
   "nav.cash": "Cash",
   "nav.savings": "Savings",
+  "nav.gold": "Gold",
   "nav.market": "Market",
   "nav.settings": "Settings",
 
@@ -50,6 +51,7 @@ export const en: Dict = {
   "kind.crypto": "Crypto",
   "kind.cash": "Cash",
   "kind.deposit": "Savings",
+  "kind.gold": "Gold",
   "kind.all": "All",
 
   "currency.VND": "VND",
@@ -64,6 +66,8 @@ export const en: Dict = {
   "reason.not_convertible": "Cannot convert into the display currency",
   "reason.no_quantity": "Quantity is zero",
   "reason.no_cost": "No cost recorded",
+  "reason.no_shop_price": "This gold product is no longer priced",
+  "reason.price_list_unreachable": "The gold price list could not be fetched",
   "reason.hint":
     "These positions are left out of the total. Refresh their price, or use a listing quoted in VND or USD.",
 
@@ -103,6 +107,7 @@ export const en: Dict = {
   "dash.count_assets": "{count} positions",
   "dash.count_cash": "{count} cash accounts",
   "dash.count_deposits": "{count} term deposits",
+  "dash.count_gold": "{count} gold holdings",
   "dash.allocation_share": "Share",
   "dash.history_first": "Recorded point",
   "dash.history_single":
@@ -234,6 +239,49 @@ export const en: Dict = {
   "dep.projection_empty": "A demand deposit has no maturity to draw towards.",
   "dep.rate_invalid": "The rate must be between 0 and 100",
   "dep.dates_invalid": "The maturity date must be after the start date",
+
+  // -- gold (Vietnamese, priced by the shop) --------------------------------
+  "gold.title": "Gold",
+  "gold.note":
+    "Vietnamese gold does not follow the world price: SJC bars and rings carry their own domestic premium. So the app reads Bảo Tín Minh Châu's published prices — what the shop buys at and what it sells at — and normalises them to a price per chỉ.",
+  "gold.add": "Add gold",
+  "gold.edit_title": "Edit the gold holding",
+  "gold.holding": "Name",
+  "gold.product": "Gold product",
+  "gold.product_hint":
+    "Pick the exact product line you hold. The price follows that line, not a single rate for all gold.",
+  "gold.quantity": "Quantity",
+  "gold.unit": "Unit",
+  "gold.unit.chi": "chỉ",
+  "gold.unit.luong": "lượng",
+  "gold.unit.gram": "gram",
+  "gold.unit.ounce": "ounce",
+  "gold.pricing": "Which price",
+  "gold.pricing_hint":
+    "“What the shop pays” is what you would actually get for it today. “What the shop charges” is the buying price — using that shows a gain on gold bought a moment ago, so the default is what the shop pays.",
+  "gold.pricing.buy": "What the shop pays",
+  "gold.pricing.sell": "What the shop charges",
+  "gold.shop_price": "Shop's published price",
+  "gold.price_per_unit": "Price per {unit}",
+  "gold.value": "Value",
+  "gold.cost": "Cost",
+  "gold.gain": "Gain / loss",
+  "gold.price_date": "Price date",
+  "gold.product_gone":
+    "This product line is no longer in the shop's price list. Pick the product again — the app will not quietly value it at another line's price.",
+  "gold.shop_down": "The gold price list could not be fetched",
+  "gold.shop_down_hint":
+    "Bảo Tín Minh Châu's price list is unreachable, so the gold holdings are not valued and are left out of the total.",
+  "gold.source_note":
+    "Prices published by Bảo Tín Minh Châu, normalised to one chỉ. Domestic gold trades at a premium to the world price, so this is the Vietnamese price and not the world one.",
+  "gold.no_products": "No gold line matches",
+  "gold.search_products": "Search gold products",
+  "gold.none_title": "No gold yet",
+  "gold.none_body":
+    "Add the gold you hold — in chỉ or in lượng — and pick the exact product line for its price to follow.",
+  "gold.delete_confirm": "Delete the gold holding {name}?",
+  "gold.total": "Total in gold",
+  "gold.weight": "Weight",
 
   // -- market ---------------------------------------------------------------
   "market.prices": "Stored prices",

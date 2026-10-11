@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "SoTaiSan — a minimal personal asset tracker (stocks, funds, crypto, cash)"
 requires-python = ">=3.12"
 dependencies = [
+    # Load-bearing, not incidental: the goldshop's server omits its intermediate
+    # certificate, so `urllib` rejects it against the platform trust store and
+    # accepts it against certifi's. See app/net.py.
+    "certifi>=2024.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0.30",

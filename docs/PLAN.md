@@ -179,6 +179,7 @@ models and could never have caught this.
 | M10 dialogs | done | the overlay wrapper measured in a browser across all four dialogs; `pnpm test` now 22 |
 | M11 dropdowns | done | every select draws its own chevron with room on both sides; measured on all four pages and in the dialogs |
 | M12 open-ended funds | done | `app/funds.py` + `tests/test_funds.py` (34), and the two funds the user actually holds priced from the live Fmarket |
+| M13 Vietnamese gold | done | `app/gold.py` + `tests/test_gold.py` (42), priced from the live Bảo Tín Minh Châu list |
 
 The screenshot pass found six more, all fixed: the allocation donut measured
 zero height inside a grid cell and never drew; a one-point history chart drew an
@@ -295,6 +296,50 @@ than reading about it:
    cache says which day each NAV is for, which is what keeps that honest rather
    than silent.
 
+## M13 — Vietnamese gold
+
+Asked for after the funds, and the request itself corrected my first attempt:
+I started building **world** gold (Yahoo's gold contract) plus a manual entry,
+on the assumption that a domestic price would not be available. The user came
+back with *"theo vàng VN nha, tôi không theo vàng thế giới, xem có API hay gì
+tương tự để get dc ko"* — track Vietnamese gold, look for an API. So I looked
+properly, and there is one.
+
+**`api.btmc.vn` — Bảo Tín Minh Châu's public price API.** Plain JSON, no key,
+`mua` and `bán` for 21 products, each stamped with the minute it changed. SJC,
+DOJI and BTMC's own web pages all render their prices with JavaScript, so the
+API is not a shortcut around scraping — it is the only machine-readable source.
+Verified against the page: SJC 14 100 000 ₫/lượng, matching the site.
+
+Six things were found by working with the real payload rather than a sample:
+
+1. **The payload is a list of one-key objects.** Every field is suffixed with
+   its row number (`@n_1`, `@pb_1`, `@d_1`), so a row must be read by its own
+   `@row`. Positional parsing yields a table of nothings.
+2. **The unit is written only inside the product's name.** `VÀNG MIẾNG SJC` is
+   per lượng, `VÀNG NGUYÊN LIỆU` per chỉ, and the payload does not say which.
+   Everything is normalised to per chỉ.
+3. **`5 LƯỢNG` parsed as "5 grams"** — the word ends in `g`, and a careless unit
+   pattern read that as grams, so a bar came out **fifty times** too small. Fixed
+   with a lookbehind; the test that would have caught it now says so.
+4. **Not every line states its weight.** `ĐỒNG XU VRTL 0.1` is a coin with no
+   unit in its name; read as the default one lượng it was 139 600 ₫ a chỉ, a
+   tenth of the price of gold. Rather than guess, lines are compared with the
+   **middle of the list** — one metal on one day cannot differ by an order of
+   magnitude — and the outlier is dropped. Trading a missing product for a
+   factor-of-ten error is not a trade worth making.
+5. **The server does not send its intermediate certificate**, so the platform
+   trust store rejected it while `curl` and `certifi` accepted it. That is why
+   `app/net.py` exists: one place that knows how to open an HTTPS connection, so
+   a feed added later gets the working behaviour by default.
+6. **The same payload carries the shop's silver.** Filtered out on the product
+   name: offering someone a silver bar when they asked for gold is worse than
+   offering nothing.
+
+**The world-price version was deleted rather than kept as a fallback.** Two
+price sources for one holding is two ways to be wrong, and the user was explicit
+about which one they track.
+
 ## Risk register
 
 | Risk | Mitigation |
@@ -309,6 +354,8 @@ than reading about it:
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| A gold holding valued at the wrong unit | The unit is parsed from the shop's own name, everything is normalised to one unit, and a line whose weight cannot be read is dropped rather than guessed |
+| A hand-entered price silently reused for years | Removed: gold is priced from the shop, and a manual price is no longer a mode |
 | A fund that silently looks unpriced | A second source for NAVs, an alias table for the one fund with two names, and a `source` column so a NAV is never shown as a close |
 | An interface that looks inert | One cursor rule over the interactive elements, asserted by `tests/cursor.test.ts` and checked in a browser with CDP |
 | A dialog sized by its content instead of its own `max-w-*` | The overlay wrapper is `w-full` and places its panel; asserted by test and measured with CDP across all four dialogs |

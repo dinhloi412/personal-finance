@@ -22,6 +22,7 @@ export interface Dict {
   "nav.holdings": string;
   "nav.cash": string;
   "nav.savings": string;
+  "nav.gold": string;
   "nav.market": string;
   "nav.settings": string;
 
@@ -51,6 +52,7 @@ export interface Dict {
   "kind.crypto": string;
   "kind.cash": string;
   "kind.deposit": string;
+  "kind.gold": string;
   "kind.all": string;
 
   "currency.VND": string;
@@ -66,6 +68,8 @@ export interface Dict {
   "reason.not_convertible": string;
   "reason.no_quantity": string;
   "reason.no_cost": string;
+  "reason.no_shop_price": string;
+  "reason.price_list_unreachable": string;
   "reason.hint": string;
 
   // -- dashboard ------------------------------------------------------------
@@ -99,6 +103,7 @@ export interface Dict {
   "dash.count_assets": string;
   "dash.count_cash": string;
   "dash.count_deposits": string;
+  "dash.count_gold": string;
   "dash.allocation_share": string;
   "dash.history_first": string;
   "dash.history_single": string;
@@ -217,6 +222,42 @@ export interface Dict {
   "dep.projection_empty": string;
   "dep.rate_invalid": string;
   "dep.dates_invalid": string;
+
+  // -- gold (Vietnamese, priced by the shop) --------------------------------
+  "gold.title": string;
+  "gold.note": string;
+  "gold.add": string;
+  "gold.edit_title": string;
+  "gold.holding": string;
+  "gold.product": string;
+  "gold.product_hint": string;
+  "gold.quantity": string;
+  "gold.unit": string;
+  "gold.unit.chi": string;
+  "gold.unit.luong": string;
+  "gold.unit.gram": string;
+  "gold.unit.ounce": string;
+  "gold.pricing": string;
+  "gold.pricing_hint": string;
+  "gold.pricing.buy": string;
+  "gold.pricing.sell": string;
+  "gold.shop_price": string;
+  "gold.price_per_unit": string;
+  "gold.value": string;
+  "gold.cost": string;
+  "gold.gain": string;
+  "gold.price_date": string;
+  "gold.product_gone": string;
+  "gold.shop_down": string;
+  "gold.shop_down_hint": string;
+  "gold.source_note": string;
+  "gold.no_products": string;
+  "gold.search_products": string;
+  "gold.none_title": string;
+  "gold.none_body": string;
+  "gold.delete_confirm": string;
+  "gold.total": string;
+  "gold.weight": string;
 
   // -- market ---------------------------------------------------------------
   "market.prices": string;

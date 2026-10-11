@@ -36,6 +36,40 @@ def old_shape():
     Base.metadata.drop_all(bind=engine)
 
 
+def insert_valuation_row(*, day: str, total: float) -> None:
+    """Write one valuation row with raw SQL, naming every column the table has.
+
+    Every NOT NULL column gets a value, including ones the caller does not care
+    about, because raw SQL does not apply a model's Python-side default — that
+    is an ORM feature. Discovering that here is the point: a `default=0.0` on a
+    column is a default for this app's writes only.
+    """
+    columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns("valuations")
+    }
+    values: dict[str, object] = {
+        "as_of": day,
+        "base_currency": "VND",
+        "total": total,
+        "market_value": total,
+        "created_at": "now",
+    }
+    for name, column in columns.items():
+        if name in values or column["nullable"]:
+            continue
+        # Anything else NOT NULL and unnamed: the zero of its own type.
+        values[name] = "" if "CHAR" in str(column["type"]).upper() else 0
+
+    names = ", ".join(values)
+    placeholders = ", ".join(f":{name}" for name in values)
+    with engine.begin() as connection:
+        connection.execute(
+            text(f"INSERT INTO valuations ({names}) VALUES ({placeholders})"),
+            values,
+        )
+
+
 def columns(table: str) -> set[str]:
     return {column["name"] for column in inspect(engine).get_columns(table)}
 
@@ -50,27 +84,37 @@ class TestAddMissingColumns:
         add_missing_columns()
         assert add_missing_columns() == []
 
-    def test_the_rows_already_there_get_the_default(self, old_shape):
-        """`ALTER TABLE ADD COLUMN` with NOT NULL needs a value for existing
-        rows, and the one it gets must be the zero of the column's own type."""
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO valuations "
-                    "(as_of, base_currency, total, market_value, cash_value, "
-                    " cost_value, unconverted_count, created_at) "
-                    "VALUES ('2026-01-01', 'VND', 10.0, 10.0, 0.0, NULL, 0, 'now')"
-                )
-            )
-        add_missing_columns()
+    def test_a_row_written_before_the_column_existed_reads_as_zero(self, old_shape):
+        """`ALTER TABLE ADD COLUMN ... NOT NULL` needs a value for the rows
+        already there, and the one it gets must be the zero of the column's own
+        type — not NULL, and not the row failing to load.
+
+        The row is written through the ORM, the way the app writes one, rather
+        than by raw SQL: a raw INSERT has to name every NOT NULL column and so
+        would have to be edited each time a column is added, which is precisely
+        the trap this test exists to catch.
+        """
+        from app import models
+
+        # The row goes in while the column is still missing, which is the state
+        # an older build would have left it in. Raw SQL, because the ORM would
+        # name a column this schema does not have yet — and written from the
+        # table's own columns rather than from a hand-kept list of them, so a
+        # column added later does not make this test fail for the wrong reason.
+        insert_valuation_row(day="2026-01-01", total=10.0)
+
+        # Now open the database the way the app does, and confirm the column
+        # comes back and the old row reads with the zero it must have.
+        from app.database import init_db
+
+        init_db()
 
         session = SessionLocal()
         try:
-            from app import models
-
             row = session.get(models.Valuation, "2026-01-01")
-            assert row is not None
-            assert row.deposit_value == 0.0
+            assert row is not None, "the old row disappeared"
+            assert row.deposit_value == 0.0, "the old row gained no default"
+            assert row.total == 10.0, "the upgrade changed a figure"
         finally:
             session.close()
 

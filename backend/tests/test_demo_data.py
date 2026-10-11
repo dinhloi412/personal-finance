@@ -106,6 +106,25 @@ class TestTheDemoPortfolio:
         assert row.source == pricing.SOURCE_FUND
         assert row.currency == "VND"
 
+    def test_it_includes_gold_priced_by_the_shop(self, db):
+        """Gold is the one holding whose price comes from neither a market feed
+        nor a fund platform, so the demo has to show one — and it has to be a
+        product the shop still publishes, which this asserts by pricing it."""
+        seed.seed()
+        from app import models
+
+        rows = db.query(models.Gold).all()
+        assert rows, "the demo has no gold"
+        assert {row.unit for row in rows} == {"chi", "luong"}
+
+        # Through the valuation layer, so a product key the shop no longer
+        # publishes fails here rather than showing as unpriced on first run.
+        from app import valuation
+
+        picture = valuation.portfolio(db)
+        assert picture.gold_value > 0
+        assert all(holding["reason"] is None for holding in picture.as_dict()["gold"])
+
     def test_it_includes_the_aliased_fund(self, db):
         """`DCDE` is the code on the certificate for the fund the fund platform
         publishes as `VFMVF4`; the demo holds it under the name a person has."""

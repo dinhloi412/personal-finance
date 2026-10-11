@@ -5,6 +5,6 @@ here. What this app tracks is what the user asked to track: stocks, funds,
 crypto, and a cash balance they edit by hand.
 """
 
-from app.routers import assets, cash, deposits, market, portfolio, settings
+from app.routers import assets, cash, deposits, gold, market, portfolio, settings
 
-__all__ = ["assets", "cash", "deposits", "market", "portfolio", "settings"]
+__all__ = ["assets", "cash", "deposits", "gold", "market", "portfolio", "settings"]

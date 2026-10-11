@@ -214,6 +214,7 @@ class PortfolioCounts(BaseModel):
     assets: int
     cash: int
     deposits: int
+    gold: int
     unconverted: int
 
 
@@ -224,12 +225,15 @@ class PortfolioOut(BaseModel):
     cash_value: float
     #: Principal plus accrued interest across every term deposit.
     deposit_value: float
+    #: Every gold holding valued at the shop's price for its product line.
+    gold_value: float
     cost_base: float | None
     gain: float | None
     gain_pct: float | None
     assets: list[AssetOut]
     cash: list[CashOut]
     deposits: list[DepositOut]
+    gold: list[GoldOut]
     by_kind: list[KindTotal]
     by_currency: list[CurrencyTotal]
     unconverted: list[Unconverted]
@@ -244,6 +248,7 @@ class ValuationPoint(BaseModel):
     market_value: float
     cash_value: float
     deposit_value: float = 0.0
+    gold_value: float = 0.0
     cost_value: float | None
     unconverted_count: int
 
@@ -412,6 +417,92 @@ class DepositOut(BaseModel):
     value_base: float | None = None
     interest_base: float | None = None
     reason: str | None = None
+
+
+class GoldOut(BaseModel):
+    """A gold holding as valued today.
+
+    `shop_price` and `price` are both present because they are different
+    numbers: the first is the shop's figure for its own product line, the
+    second is that figure expressed for ONE unit of the unit held. Showing only
+    the first would invite multiplying it by a weight in the wrong unit, which
+    is a factor of ten in gold.
+
+    `from_attributes` because the valuation layer hands over a dataclass rather
+    than a dict: the arithmetic and the response shape are deliberately not the
+    same object.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    currency: Currency
+    quantity: float
+    unit: str
+    pricing: str
+    note: str | None
+
+    product_key: str
+    product_name: str | None
+    shop_price: float | None
+    price: float | None
+    price_as_of: str | None
+    price_source: str | None
+
+    value: float | None
+    value_base: float | None
+    cost_basis: float | None
+    reason: str | None = None
+
+
+class GoldCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    currency: Currency
+    quantity: float = Field(gt=0)
+    unit: Literal["ounce", "chi", "luong", "gram"] = "chi"
+    #: The goldshop product line to follow, as `app.gold.normalise_key` makes
+    #: it. Refused if the shop does not currently publish it, so a holding can
+    #: never start life pointing at nothing.
+    product_key: str = Field(min_length=1, max_length=200)
+    pricing: Literal["buy", "sell"] = "buy"
+    cost_basis: float | None = Field(default=None, ge=0)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class GoldUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    currency: Currency | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    unit: Literal["ounce", "chi", "luong", "gram"] | None = None
+    product_key: str | None = Field(default=None, min_length=1, max_length=200)
+    pricing: Literal["buy", "sell"] | None = None
+    cost_basis: float | None = Field(default=None, ge=0)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class GoldProductOut(BaseModel):
+    """One line a goldshop publishes, normalised to a price per chỉ."""
+
+    key: str
+    name: str
+    buy: float
+    sell: float
+    unit: str
+    updated_at: str
+    #: The date part of `updated_at`, as this app stores dates.
+    updated_on: str
+
+
+class GoldProductList(BaseModel):
+    products: list[GoldProductOut]
+    #: True when the shop could not be reached — the picker says so rather than
+    #: showing an empty list as though nothing existed.
+    degraded: bool = False
+    error: str | None = None
+    #: Where the prices come from, said in the response so the interface never
+    #: has to hard-code the name of a shop.
+    source: str
 
 
 class DepositRollRequest(BaseModel):

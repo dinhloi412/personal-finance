@@ -68,6 +68,7 @@ const KIND_ORDER: AssetKind[] = [
   "crypto",
   "cash",
   "deposit",
+  "gold",
 ];
 
 export function Dashboard() {
@@ -255,7 +256,8 @@ export function Dashboard() {
   if (
     portfolio.counts.assets === 0 &&
     portfolio.counts.cash === 0 &&
-    portfolio.counts.deposits === 0
+    portfolio.counts.deposits === 0 &&
+    portfolio.counts.gold === 0
   ) {
     return (
       <div className="space-y-4">
@@ -324,6 +326,9 @@ export function Dashboard() {
             <span>
               {t("dash.count_deposits", { count: portfolio.counts.deposits })}
             </span>
+          )}
+          {portfolio.counts.gold > 0 && (
+            <span>{t("dash.count_gold", { count: portfolio.counts.gold })}</span>
           )}
         </p>
       </Card>

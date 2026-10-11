@@ -26,6 +26,7 @@ export const vi: Dict = {
   "nav.holdings": "Danh mục",
   "nav.cash": "Tiền mặt",
   "nav.savings": "Tiết kiệm",
+  "nav.gold": "Vàng",
   "nav.market": "Thị trường",
   "nav.settings": "Cài đặt",
 
@@ -55,6 +56,7 @@ export const vi: Dict = {
   "kind.crypto": "Coin",
   "kind.cash": "Tiền mặt",
   "kind.deposit": "Tiết kiệm",
+  "kind.gold": "Vàng",
   "kind.all": "Tất cả",
 
   "currency.VND": "VNĐ",
@@ -69,6 +71,8 @@ export const vi: Dict = {
   "reason.not_convertible": "Không đổi được sang tiền tệ hiển thị",
   "reason.no_quantity": "Khối lượng bằng 0",
   "reason.no_cost": "Chưa ghi giá vốn",
+  "reason.no_shop_price": "Dòng vàng này không còn trong bảng giá",
+  "reason.price_list_unreachable": "Chưa lấy được bảng giá vàng",
   "reason.hint":
     "Những vị thế này không được cộng vào tổng. Hãy cập nhật giá, hoặc dùng mã được niêm yết bằng VNĐ/USD.",
 
@@ -108,6 +112,7 @@ export const vi: Dict = {
   "dash.count_assets": "{count} vị thế",
   "dash.count_cash": "{count} khoản tiền mặt",
   "dash.count_deposits": "{count} khoản tiết kiệm",
+  "dash.count_gold": "{count} khoản vàng",
   "dash.allocation_share": "Tỷ trọng",
   "dash.history_first": "Mốc đã ghi",
   "dash.history_single":
@@ -239,6 +244,49 @@ export const vi: Dict = {
   "dep.projection_empty": "Khoản không kỳ hạn không có ngày đáo hạn để vẽ tới.",
   "dep.rate_invalid": "Lãi suất phải từ 0 đến 100",
   "dep.dates_invalid": "Ngày đáo hạn phải sau ngày gửi",
+
+  // -- gold (Vietnamese, priced by the shop) --------------------------------
+  "gold.title": "Vàng",
+  "gold.note":
+    "Vàng trong nước không theo giá thế giới: vàng miếng SJC và vàng nhẫn có mức chênh riêng. Nên app lấy giá niêm yết của Bảo Tín Minh Châu — giá mua và giá bán — rồi quy về giá mỗi chỉ.",
+  "gold.add": "Thêm vàng",
+  "gold.edit_title": "Sửa khoản vàng",
+  "gold.holding": "Tên khoản",
+  "gold.product": "Loại vàng",
+  "gold.product_hint":
+    "Chọn đúng dòng sản phẩm bạn đang giữ. Giá sẽ bám theo dòng đó, không phải theo một mức chung.",
+  "gold.quantity": "Số lượng",
+  "gold.unit": "Đơn vị",
+  "gold.unit.chi": "chỉ",
+  "gold.unit.luong": "lượng",
+  "gold.unit.gram": "gram",
+  "gold.unit.ounce": "ounce",
+  "gold.pricing": "Lấy giá nào",
+  "gold.pricing_hint":
+    "“Giá shop mua” là số tiền bạn thực nhận nếu bán hôm nay. “Giá shop bán” là giá bạn phải trả để mua — dùng giá này thì vàng vừa mua đã thấy lãi, nên mặc định là giá shop mua.",
+  "gold.pricing.buy": "Giá shop mua",
+  "gold.pricing.sell": "Giá shop bán",
+  "gold.shop_price": "Giá shop niêm yết",
+  "gold.price_per_unit": "Giá mỗi {unit}",
+  "gold.value": "Giá trị",
+  "gold.cost": "Giá vốn",
+  "gold.gain": "Lãi/lỗ",
+  "gold.price_date": "Ngày giá",
+  "gold.product_gone":
+    "Dòng sản phẩm này không còn trong bảng giá của shop. Hãy chọn lại loại vàng — app không tự gán sang dòng khác vì như vậy là định giá sai mà không nói.",
+  "gold.shop_down": "Chưa lấy được bảng giá vàng",
+  "gold.shop_down_hint":
+    "Không kết nối được tới bảng giá của Bảo Tín Minh Châu, nên các khoản vàng chưa được định giá và không được cộng vào tổng.",
+  "gold.source_note":
+    "Giá do Bảo Tín Minh Châu niêm yết, quy đổi về một chỉ. Vàng trong nước có mức chênh so với giá thế giới, nên đây là giá trong nước chứ không phải giá thế giới.",
+  "gold.no_products": "Không có dòng vàng nào khớp",
+  "gold.search_products": "Tìm loại vàng",
+  "gold.none_title": "Chưa có khoản vàng nào",
+  "gold.none_body":
+    "Thêm số vàng bạn đang giữ — theo chỉ hoặc theo lượng — rồi chọn đúng dòng sản phẩm để app bám giá.",
+  "gold.delete_confirm": "Xoá khoản vàng {name}?",
+  "gold.total": "Tổng vàng",
+  "gold.weight": "Khối lượng",
 
   // -- market ---------------------------------------------------------------
   "market.prices": "Giá đã lưu",

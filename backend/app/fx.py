@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, net
 from app.money import BASE_CURRENCIES, CURRENCIES, BaseCurrency
 
 FX_URL = "https://open.er-api.com/v6/latest/{base}"
@@ -79,7 +79,7 @@ def _fetch_rates(base: str) -> dict:
         FX_URL.format(base=base),
         headers={"User-Agent": "SoTaiSan/0.1 (personal asset tracker)"},
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with net.open_url(request, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

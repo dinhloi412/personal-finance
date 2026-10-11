@@ -102,7 +102,17 @@ test("no dictionary key is dead", async () => {
    * Labels built by template: `t(`kind.${row.kind}`)`. The whole family is
    * reachable from that one expression, so the prefix is what has to appear.
    */
-  const prefixes = ["currency.", "kind.", "lang.", "nav.", "reason."];
+  const prefixes = [
+    "currency.",
+    "kind.",
+    "lang.",
+    "nav.",
+    "reason.",
+    // `t(`gold.unit.${unit}`)` and `t(`gold.pricing.${mode}`)` reach a whole
+    // family from one expression, so the prefix is what has to appear.
+    "gold.unit.",
+    "gold.pricing.",
+  ];
 
   const dead = viKeys.filter((key) => {
     if (source.includes(`"${key}"`)) return false;

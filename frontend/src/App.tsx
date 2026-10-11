@@ -18,6 +18,7 @@ import { I18nProvider, formatMoney, useI18n } from "./i18n";
 import type { Lang } from "./api/types";
 import { Button, Notice, Spinner } from "./components/ui";
 import { Cash } from "./views/Cash";
+import { Gold } from "./views/Gold";
 import { Dashboard } from "./views/Dashboard";
 import { Holdings } from "./views/Holdings";
 import { Market } from "./views/Market";
@@ -29,6 +30,7 @@ type Route =
   | "holdings"
   | "cash"
   | "savings"
+  | "gold"
   | "market"
   | "settings";
 
@@ -40,6 +42,7 @@ const ROUTES: Route[] = [
   "holdings",
   "cash",
   "savings",
+  "gold",
   "market",
   "settings",
 ];
@@ -49,6 +52,7 @@ const PATHS: Record<Route, string> = {
   holdings: "/holdings",
   cash: "/cash",
   savings: "/savings",
+  gold: "/gold",
   market: "/market",
   settings: "/settings",
 };
@@ -213,6 +217,7 @@ function Shell() {
             {route === "holdings" && <Holdings />}
             {route === "cash" && <Cash />}
             {route === "savings" && <Savings />}
+            {route === "gold" && <Gold />}
             {route === "market" && <Market />}
             {route === "settings" && <Settings />}
           </>

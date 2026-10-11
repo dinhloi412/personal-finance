@@ -17,6 +17,7 @@ to one job: **keep track of what you own and what it is worth.**
 | 3 | `cash` is a **manual balance** the user edits by hand when it moves |
 | 2b | Open-ended Vietnamese funds (quỹ mở) priced by **NAV from Fmarket**, the kind of fund Yahoo cannot price |
 | 3b | `deposit` is a **term deposit**: a principal, a rate and a term, whose interest is **computed** day by day |
+| 3c | `gold` is a **weight of Vietnamese gold**: a quantity, a unit, and a goldshop product line whose **published price** it follows |
 | 4 | **2 currencies**: `VND`, `USD` — one is the *base* for all totals |
 | 5 | **2 languages**: `vi` (Tiếng Việt), `en` (English) |
 | 6 | Net-worth snapshot history + allocation breakdown |
@@ -152,6 +153,7 @@ by different facts:
 |---|---|---|---|
 | listed (`stock`, `fund` ETF, `crypto`) | Yahoo Finance | last **close** of a session | per session |
 | open-ended `fund` | Fmarket | **NAV** per certificate | once a day |
+| `gold` | Bảo Tín Minh Châu | **mua / bán** per product line | a few times a day |
 
 The order is: the source that priced the symbol last time, then the other one,
 then a recorded failure. A fund certificate is not listed, so Yahoo will never
@@ -247,6 +249,43 @@ which would quietly shorten a term taken across a month of different length.
 the proceeds as cash happen together, because doing it in two screens is how a
 portfolio ends up holding the same million twice.
 
+### 4.3 Bảo Tín Minh Châu (Vietnamese gold)
+
+Vietnam's gold price is not the world price. SJC bars and 9999 rings carry a
+domestic premium fixed by supply and by the State Bank's import rules, and that
+premium is where the money is — so this app reads a Vietnamese shop, not a world
+feed, from a public JSON endpoint that needs no key.
+
+Four facts about that payload, all found by looking at it:
+
+- **The price is per unit, and the unit is written only inside the product's
+  name** (`... 5 LƯỢNG ...`, `... 0,5 KG ...`, or nothing, which for a bar means
+  one lượng). Everything is normalised to a price **per chỉ**, the unit
+  Vietnamese gold is bought in. 1 lượng is 10 chỉ by definition.
+- **The shop buys at one price and sells at another.** The default is what the
+  shop **pays** you (`mua`): valuing gold at the sell price shows a profit on
+  gold bought a moment ago. A holding records which of the two it uses, and the
+  interface shows the other beside it as the spread.
+- **The payload is a list of one-key objects**, every field suffixed with its
+  row number (`@n_1`, `@pb_1`, `@d_1`), so rows are read by their own number.
+- **Not every line states its weight.** `ĐỒNG XU VRTL 0.1` is a coin whose name
+  gives no unit; read as the default one lượng it came out at 139 600 ₫ a chỉ,
+  a tenth of what gold costs. Rather than guess, every line is compared with the
+  **middle of the list** — gold is one metal on one day, so its lines cannot
+  differ by an order of magnitude — and a line that does is dropped. A guessed
+  weight is wrong by a factor of ten and says nothing.
+
+A holding points at a product line by a normalised **key**, not by its display
+name, because the shop edits its names. A key that no longer appears is reported
+as unpriced and left out of the total: re-pointing it at whatever is first in
+the list would value it wrongly and say nothing.
+
+Two more facts about this particular shop, which are why `app/net.py` exists:
+its server does not send the intermediate certificate, so the platform trust
+store rejects it while `certifi` accepts it; and the same payload carries the
+shop's **silver** lines, which are filtered out — offering someone a silver bar
+when they asked for gold is worse than offering nothing.
+
 ## 6. API
 
 All paths under `/api`. Requests and responses are JSON. Local-only; CORS
@@ -276,6 +315,12 @@ allows `localhost:5173` for development.
 | GET | `/api/deposits/{id}/schedule` | value from today to maturity |
 | POST | `/api/deposits/{id}/roll` | roll a matured deposit into a new term |
 | POST | `/api/deposits/{id}/withdraw` | close it and record the cash |
+| GET | `/api/gold/products` | the goldshop's lines, per chỉ (filter `q`, `fresh`) |
+| GET | `/api/gold` | gold holdings, valued at the shop's price |
+| POST | `/api/gold` | add a holding (the product key is checked against the shop) |
+| GET | `/api/gold/{id}` | read one |
+| PATCH | `/api/gold/{id}` | change the weight, the unit or the price basis |
+| DELETE | `/api/gold/{id}` | delete |
 | GET | `/api/portfolio` | valued portfolio + allocations + totals |
 | GET | `/api/portfolio/history` | valuation series |
 | POST | `/api/portfolio/snapshot` | write today's valuation |
@@ -298,12 +343,16 @@ views:
    a slide-over form; a symbol picker backed by `/api/market/search`.
 3. **Cash** — list of cash accounts, inline balance editing (the manual
    update), per-currency subtotals.
-4. **Savings** — term deposits as cards: the bank, the rate, the term so far as
+4. **Gold** — each holding as a card: the product line it follows, the shop's
+   published price, that price per unit of the unit held, the value, and the
+   gain. A holding on a line the shop no longer publishes says so instead of
+   being valued at another line's price.
+5. **Savings** — term deposits as cards: the bank, the rate, the term so far as
    a bar, value today, interest accrued, value at maturity, and the growth to
    maturity. A matured deposit is highlighted and carries the two actions that
    make sense — roll it over, or withdraw it into a cash account.
-5. **Market** — cached quotes and FX rates with their dates, refresh buttons.
-6. **Settings** — base currency, language, data location, and a danger zone that
+6. **Market** — cached quotes and FX rates with their dates, refresh buttons.
+7. **Settings** — base currency, language, data location, and a danger zone that
    wipes every record behind a confirmation. The wipe keeps the settings and the
    cached prices and rates: they are not the user's data, and throwing away a
    rate would leave a fresh start unable to convert anything.

@@ -36,6 +36,15 @@ DEMO_ASSETS = [
     ("BTC-USD", "crypto", "Bitcoin", 0.15, 6_000.0, "USD"),
 ]
 
+#: name, quantity, unit, product key, pricing, cost paid. The product key is the
+#: goldshop's own line, which is what the price follows — `VANG MIENG SJC` is a
+#: different price from `NHẪN TRÒN TRƠN`, which is the whole point of tracking
+#: gold in Vietnam rather than tracking the world price.
+DEMO_GOLD = [
+    ("SJC 5 chỉ", 5.0, "chi", "vang-mieng-sjc-vang-sjc", "buy", 6_800_000.0),
+    ("Nhẫn tròn trơn 2 lượng", 2.0, "luong", "nhan-tron-tron-vang-rong-thang-long", "buy", 26_000_000.0),
+]
+
 DEMO_CASH = [
     ("Vietcombank", "VND", 85_000_000.0),
     ("Techcombank", "VND", 40_000_000.0),
@@ -56,6 +65,7 @@ def is_empty(session) -> bool:
         session.query(models.Asset).count() == 0
         and session.query(models.CashAccount).count() == 0
         and session.query(models.Deposit).count() == 0
+        and session.query(models.Gold).count() == 0
     )
 
 
@@ -102,6 +112,18 @@ def seed(*, force: bool = False) -> bool:
                     interest_mode="at_maturity",
                 )
             )
+        for name, quantity, unit, product_key, price_basis, cost in DEMO_GOLD:
+            session.add(
+                models.Gold(
+                    name=name,
+                    currency="VND",
+                    quantity=quantity,
+                    unit=unit,
+                    product_key=product_key,
+                    pricing=price_basis,
+                    cost_basis=cost,
+                )
+            )
         session.commit()
 
         print("Fetching prices and rates for the demo portfolio...")
@@ -112,7 +134,8 @@ def seed(*, force: bool = False) -> bool:
         print(f"  rates:  {'ok' if report['fx']['ok'] else report['fx']['error']}")
         print(
             f"Demo portfolio written: {len(DEMO_ASSETS)} positions, "
-            f"{len(DEMO_CASH)} cash accounts, {len(DEMO_DEPOSITS)} term deposits."
+            f"{len(DEMO_CASH)} cash accounts, {len(DEMO_DEPOSITS)} term deposits, "
+            f"{len(DEMO_GOLD)} gold holdings."
         )
         return True
     finally:
