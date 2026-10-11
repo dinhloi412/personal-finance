@@ -74,7 +74,9 @@ rings carry a domestic premium, and that premium is most of the money — so the
 app reads a Vietnamese shop rather than a world feed. Each holding says which of
 the shop's two prices it uses, because the shop buys at one and sells at the
 other and valuing gold at the selling price shows a profit on gold bought a
-moment ago.
+moment ago — and because that asking price is what a "gold price" means: the
+figure in every headline. Both are shown per **lượng** and per **chỉ**, since a
+price without its unit is a number that can be ten times wrong.
 
 **Savings** — term deposits: the bank, the principal, the rate the contract
 quotes, and the term. You do not retype its value, because the app can work it

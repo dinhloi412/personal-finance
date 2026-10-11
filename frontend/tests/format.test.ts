@@ -17,6 +17,7 @@ import {
   formatMoney,
   formatPercent,
   formatQuantity,
+  LUONG_IN_CHI,
   formatRate,
   formatShare,
   formatSignedMoney,
@@ -106,4 +107,21 @@ test("a share is one decimal and unknown is a dash", () => {
 test("a share of zero is zero, not unknown", () => {
   assert.notEqual(formatShare(0, "en"), DASH);
   assert.match(formatShare(0, "en"), /0\.0%/);
+});
+
+/**
+ * Gold's units are the thing most likely to be out by ten, so the one place the
+ * frontend does that arithmetic is stated here.
+ *
+ * The arithmetic that VALUES a holding is the backend's (`GRAMS_PER_UNIT`); this
+ * is the display constant that puts the goldshop's published price — per lượng —
+ * back beside the per-chỉ price the app stores. They disagreed once, and the
+ * symptom was a "/ lượng" label over a per-chỉ figure: correct in the data,
+ * wrong on the screen.
+ */
+test("a lượng is ten chỉ on the screen as well as in the data", () => {
+  assert.equal(LUONG_IN_CHI, 10);
+  const shopPublished = 14_360_000; // ₫ per lượng, the shop's own figure
+  assert.equal(shopPublished / LUONG_IN_CHI, 1_436_000); // ₫ per chỉ
+  assert.equal(1_436_000 * LUONG_IN_CHI, shopPublished);
 });

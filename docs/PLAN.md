@@ -328,6 +328,13 @@ wrong.** They were right about the symptom and the number was right:
    its own. Both now come from one constant, and a test asks the API the
    question a client that has never heard of `pricing` would ask.
 
+**And a third, when the user looked again:** the per-lượng label sat over a
+per-chỉ figure. The shop publishes `14.360.000 ₫` for one lượng and the app
+stores `1.436.000 ₫` for one chỉ; putting the stored figure under a "/ lượng"
+label made a correct number look ten times wrong. Every gold price now carries
+its unit, on the card and in the form, and the form spells out the per-lượng
+equivalent so the two are never mistaken for each other.
+
 Six things were found by working with the real payload rather than a sample:
 
 1. **The payload is a list of one-key objects.** Every field is suffixed with
@@ -371,6 +378,7 @@ about which one they track.
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| A gold price that is right in the data and wrong on screen | Every gold figure is labelled with the unit it is for, and the one place the frontend converts between units is a named constant with a test |
 | A gold price on the wrong side of the spread | One declared default, asserted against the figure the news publishes rather than against the code's own choice |
 | A gold holding valued at the wrong unit | The unit is parsed from the shop's own name, everything is normalised to one unit, and a line whose weight cannot be read is dropped rather than guessed |
 | A hand-entered price silently reused for years | Removed: gold is priced from the shop, and a manual price is no longer a mode |

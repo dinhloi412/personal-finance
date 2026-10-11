@@ -33,6 +33,19 @@ export const LANGUAGES: Lang[] = ["vi", "en"];
 /** The currency codes this build can express. */
 export const CURRENCIES: Currency[] = ["VND", "USD"];
 
+/**
+ * How many chỉ a lượng is — a definition, not a measurement.
+ *
+ * Here rather than in the Gold view because it is a fact about the units, and
+ * because a plain module can be tested: the value that values a holding comes
+ * from the backend's `GRAMS_PER_UNIT`, and this is only used to put the
+ * goldshop's own published figure — which is per lượng — back beside the
+ * per-chỉ price the app stores. A disagreement between the two shows a number
+ * that is right in the data and wrong on the screen, which is how it appeared
+ * once: a "/ lượng" label over a per-chỉ figure.
+ */
+export const LUONG_IN_CHI = 10;
+
 /** How many decimals a currency is shown with. */
 export function decimalsFor(currency: string): number {
   return currency.toUpperCase() === "VND" ? 0 : 2;

@@ -241,7 +241,8 @@ export interface Dict {
   "gold.pricing_hint": string;
   "gold.pricing.buy": string;
   "gold.pricing.sell": string;
-  "gold.shop_price": string;
+  "gold.shop_price_per": string;
+  "gold.luong_note": string;
   "gold.price_per_unit": string;
   "gold.value": string;
   "gold.cost": string;

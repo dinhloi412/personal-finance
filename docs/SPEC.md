@@ -276,6 +276,14 @@ Four facts about that payload, all found by looking at it:
   every newspaper headline. The default now lives in one place —
   `app.money.DEFAULT_GOLD_PRICING` — and the tests assert against the published
   news figure rather than against the code's own choice.
+
+**Every gold price carries its unit, on screen as well as in the data.** The
+shop publishes a price for its whole product line — one **lượng**, which is ten
+chỉ — and the app stores it normalised to one chỉ. Both figures are therefore
+shown, each labelled with the unit it is for: `14.360.000 ₫ / lượng` beside
+`1.436.000 ₫ / chỉ`. A price with no unit beside it is the bug this guards: a
+correct per-chỉ figure under a "/ lượng" label reads as a number that is ten
+times wrong, which is how a user saw it and said so.
 - **The payload is a list of one-key objects**, every field suffixed with its
   row number (`@n_1`, `@pb_1`, `@d_1`), so rows are read by their own number.
 - **Not every line states its weight.** `ĐỒNG XU VRTL 0.1` is a coin whose name

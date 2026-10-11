@@ -39,6 +39,7 @@ import type {
 } from "../api/types";
 import {
   DASH,
+  LUONG_IN_CHI,
   formatDate,
   formatMoney,
   formatPercent,
@@ -251,18 +252,28 @@ function GoldForm({
 
         {chosen && (
           <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            {/* Every figure here carries its unit. The shop publishes a price
+                for its whole product line — one LƯỢNG, which is ten chỉ — and
+                showing that number as a bare "1.396.000 ₫" beside a field
+                asking for a number of chỉ is how a correct price reads as a
+                wrong one. */}
             <div className="flex flex-wrap justify-between gap-2">
               <span>{t("gold.pricing.buy")}</span>
               <span className="tabular-nums font-medium text-slate-900">
-                {formatMoney(chosen.buy, "VND", lang)}
+                {formatMoney(chosen.buy, "VND", lang)} / {t("gold.unit.chi")}
               </span>
             </div>
             <div className="mt-1 flex flex-wrap justify-between gap-2">
               <span>{t("gold.pricing.sell")}</span>
               <span className="tabular-nums font-medium text-slate-900">
-                {formatMoney(chosen.sell, "VND", lang)}
+                {formatMoney(chosen.sell, "VND", lang)} / {t("gold.unit.chi")}
               </span>
             </div>
+            <p className="mt-1 tabular-nums text-slate-500">
+              {t("gold.luong_note", {
+                luong: formatMoney(chosen.sell * 10, "VND", lang),
+              })}
+            </p>
             <p className="mt-1 text-slate-500">
               {t("gold.price_date")}: {formatDate(chosen.updated_on, lang)}
             </p>
@@ -485,13 +496,17 @@ export function Gold() {
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <Stat
-                      // The shop's published figure, named as such, so it is
-                      // never multiplied by a weight in another unit.
-                      label={t("gold.shop_price")}
+                      // The shop publishes a price for its whole product line.
+                      // The app stores that normalised to one chỉ, so showing
+                      // the stored figure under a "/ lượng" label would be out
+                      // by ten — which is exactly what this label made it do
+                      // once. The shop's own figure is multiplied back up here,
+                      // for display only.
+                      label={t("gold.shop_price_per", { unit: t("gold.unit.luong") })}
                       value={
                         row.shop_price === null
                           ? DASH
-                          : formatMoney(row.shop_price, "VND", lang)
+                          : formatMoney(row.shop_price * LUONG_IN_CHI, "VND", lang)
                       }
                       hint={t(`gold.pricing.${row.pricing}` as const)}
                     />
