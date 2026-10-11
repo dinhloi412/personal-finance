@@ -311,6 +311,23 @@ DOJI and BTMC's own web pages all render their prices with JavaScript, so the
 API is not a shortcut around scraping — it is the only machine-readable source.
 Verified against the page: SJC 14 100 000 ₫/lượng, matching the site.
 
+**Two more, found after it shipped and because a user said the price looked
+wrong.** They were right about the symptom and the number was right:
+
+1. **The default landed on the wrong side of the spread.** The app valued gold
+   at what the shop *pays* (141 triệu/lượng for SJC); every newspaper headline,
+   and the whole market, means what the shop *charges* (144,8 triệu). The number
+   was correctly read and correctly converted — it was the wrong one of the two.
+   The default is now the asking price, which is also the same basis as every
+   other holding in the app, and the labels say which is the market price.
+2. **The default was declared in three places and they disagreed.** The
+   vocabulary said `sell` after the fix, the model's Python-side default said
+   `sell`, and the column's `server_default` still said `buy` — so a write that
+   did not go through the ORM, or an INSERT that did not name the column, landed
+   on the old value. A Python-side default is an ORM feature; the column needs
+   its own. Both now come from one constant, and a test asks the API the
+   question a client that has never heard of `pricing` would ask.
+
 Six things were found by working with the real payload rather than a sample:
 
 1. **The payload is a list of one-key objects.** Every field is suffixed with
@@ -354,6 +371,7 @@ about which one they track.
 | A blank name reaching a NOT NULL column | Schema refuses it with a 422; the router substitutes the symbol |
 | A dictionary key nothing reads | `pnpm test` fails on a declared key with no `t()` call behind it |
 | A chart that renders nothing | Every chart sets `isAnimationActive={false}`; the kit's wrapper is `w-full min-w-0` with an explicit height |
+| A gold price on the wrong side of the spread | One declared default, asserted against the figure the news publishes rather than against the code's own choice |
 | A gold holding valued at the wrong unit | The unit is parsed from the shop's own name, everything is normalised to one unit, and a line whose weight cannot be read is dropped rather than guessed |
 | A hand-entered price silently reused for years | Removed: gold is priced from the shop, and a manual price is no longer a mode |
 | A fund that silently looks unpriced | A second source for NAVs, an alias table for the one fund with two names, and a `source` column so a NAV is never shown as a close |

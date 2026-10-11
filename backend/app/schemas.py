@@ -465,7 +465,9 @@ class GoldCreate(BaseModel):
     #: it. Refused if the shop does not currently publish it, so a holding can
     #: never start life pointing at nothing.
     product_key: str = Field(min_length=1, max_length=200)
-    pricing: Literal["buy", "sell"] = "buy"
+    #: The default is the shop's asking price, which is what a "gold price"
+    #: means and what every other holding here is valued at.
+    pricing: Literal["sell", "buy"] = "sell"
     cost_basis: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
 

@@ -263,9 +263,9 @@ export const vi: Dict = {
   "gold.unit.ounce": "ounce",
   "gold.pricing": "Lấy giá nào",
   "gold.pricing_hint":
-    "“Giá shop mua” là số tiền bạn thực nhận nếu bán hôm nay. “Giá shop bán” là giá bạn phải trả để mua — dùng giá này thì vàng vừa mua đã thấy lãi, nên mặc định là giá shop mua.",
-  "gold.pricing.buy": "Giá shop mua",
-  "gold.pricing.sell": "Giá shop bán",
+    "“Giá shop bán” là giá thị trường — đúng con số báo chí đưa, và cùng cách tính với mọi tài sản khác trong app (giá bạn phải trả để mua). “Giá shop mua” là số tiền bạn thực nhận nếu bán hôm nay; chênh lệch giữa hai giá là chi phí thật.",
+  "gold.pricing.buy": "Giá shop mua vào",
+  "gold.pricing.sell": "Giá shop bán ra (= giá thị trường)",
   "gold.shop_price": "Giá shop niêm yết",
   "gold.price_per_unit": "Giá mỗi {unit}",
   "gold.value": "Giá trị",

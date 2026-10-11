@@ -113,8 +113,14 @@ class GoldPrice:
     #: beside the per-unit one derived from it.
     raw_name: str
 
-    def price(self, basis: str = PRICE_BASIS_BUY) -> float:
-        return self.sell if basis == PRICE_BASIS_SELL else self.buy
+    def price(self, basis: str = PRICE_BASIS_SELL) -> float:
+        """The price for one unit, at the requested basis.
+
+        Defaults to the sell side — the shop's asking price — because that is
+        what "the gold price" means and what everything else in this app is
+        valued at. `buy` is the other question, and it is asked explicitly.
+        """
+        return self.buy if basis == PRICE_BASIS_BUY else self.sell
 
 
 # --------------------------------------------------------------------------

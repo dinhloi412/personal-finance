@@ -26,7 +26,7 @@ from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.money import DEFAULT_INTEREST_MODE, GOLD_PRICING_BUY
+from app.money import DEFAULT_INTEREST_MODE, GOLD_PRICING_SELL
 
 
 def utcnow_iso() -> str:
@@ -188,9 +188,9 @@ class Gold(Base):
     that product's own price, converted from the shop's unit to the one held.
 
     `pricing` says which of the shop's two prices to use, and it is a stored
-    choice rather than a default buried in code: `buy` is what the shop pays
-    you today, `sell` is what it charges. Valuing gold at the sell price shows
-    a profit on gold bought a moment ago.
+    choice rather than a default buried in code. `sell` — the default — is what
+    the shop charges, which is the figure the news quotes and the same basis as
+    every other holding here. `buy` is what the shop would pay you today.
     """
 
     __tablename__ = "gold"
@@ -203,9 +203,18 @@ class Gold(Base):
     #: The goldshop line this holding follows, as `gold.normalise_key` makes it.
     #: A key rather than a display name, because the shop edits its names.
     product_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    #: `buy` or `sell` — see the class docstring.
+    #: `sell` or `buy` — see the class docstring. Defaults to what the shop
+    #: charges, which is the figure everyone calls "the gold price".
+    #:
+    #: `server_default` as well as `default`, and that is not belt-and-braces:
+    #: a Python-side default is applied by the ORM, so a write that does not go
+    #: through the ORM — raw SQL, a migration, another tool — would fall back
+    #: to the column's own default. Two declarations of one default is two
+    #: chances for them to disagree, and they did: the schema said `buy` while
+    #: the model said `sell`, and a holding created without naming its pricing
+    #: came out on the wrong side of the spread.
     pricing: Mapped[str] = mapped_column(
-        String, nullable=False, default=GOLD_PRICING_BUY
+        String, nullable=False, default=GOLD_PRICING_SELL, server_default=GOLD_PRICING_SELL
     )
     #: Total paid, in `currency` — the same meaning it has on a position.
     cost_basis: Mapped[float | None] = mapped_column(Float, nullable=True)

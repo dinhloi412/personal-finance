@@ -258,9 +258,9 @@ export const en: Dict = {
   "gold.unit.ounce": "ounce",
   "gold.pricing": "Which price",
   "gold.pricing_hint":
-    "“What the shop pays” is what you would actually get for it today. “What the shop charges” is the buying price — using that shows a gain on gold bought a moment ago, so the default is what the shop pays.",
-  "gold.pricing.buy": "What the shop pays",
-  "gold.pricing.sell": "What the shop charges",
+    "“What the shop charges” is the market price — the figure the news quotes, and the same basis as every other holding here (what it would cost to buy). “What the shop pays” is what you would actually get for it today; the gap between the two is a real cost.",
+  "gold.pricing.buy": "What the shop pays (buy-in)",
+  "gold.pricing.sell": "What the shop charges (= market)",
   "gold.shop_price": "Shop's published price",
   "gold.price_per_unit": "Price per {unit}",
   "gold.value": "Value",

@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import pytest
 
+from sqlalchemy import text
+
 from app import gold, models, pricing, valuation
+from app.database import engine
 from app.money import CHI_IN_GRAMS, GRAMS_PER_UNIT
 
 #: The shop's real figures for 2026-10-11, from the real payload.
@@ -28,6 +31,7 @@ SJC_PER_LUONG_BUY = 14_100_000
 SJC_PER_LUONG_SELL = 14_480_000
 SJC_PER_CHI_BUY = 1_410_000
 SJC_PER_CHI_SELL = 1_448_000
+SJC_PER_LUONG_SELL = 14_480_000
 
 
 class TestThePayloadShape:
@@ -122,14 +126,80 @@ class TestTheUnitArithmetic:
 
 
 class TestTheTwoPrices:
-    def test_the_default_is_what_the_shop_would_pay_you(self):
-        # The buy price, not the sell price: gold is worth what you could get
-        # for it, and the spread is a real cost rather than a rounding error.
-        assert gold.PRICE_BASIS_BUY == "buy"
+    def test_the_default_is_the_price_everyone_calls_the_gold_price(self):
+        """The shop's asking price, because that is what a gold price means.
+
+        The news on 2026-10-11 said SJC was 144,8 triệu a lượng, and that is the
+        shop's `bán` figure — what it charges. The app showed the `mua` figure
+        by default, which is 141 triệu, and a user reading the news saw a price
+        that did not match. Every other holding here is valued at what it would
+        cost to buy, so gold follows the same rule.
+        """
+        assert gold.PRICE_BASIS_SELL == "sell"
         sjc = gold.find("vang-mieng-sjc-vang-sjc")
-        assert sjc.price() == sjc.buy
-        assert sjc.price("sell") == sjc.sell
+        assert sjc.price() == sjc.sell
+        assert sjc.price("buy") == sjc.buy
         assert sjc.sell > sjc.buy, "a shop sells for more than it buys for"
+
+    def test_the_asking_price_is_the_one_the_news_quotes(self):
+        """144,8 triệu a lượng is the shop's asking price, not what it pays.
+
+        This is the assertion that would have caught the default being on the
+        wrong side of the spread: the published figure and the app's default
+        have to be the same side of it.
+        """
+        sjc = gold.find("vang-mieng-sjc-vang-sjc")
+        # The news figure is per LƯỢNG; this app normalises to the chỉ, so the
+        # comparison is a lượng's worth of chỉ against it.
+        assert sjc.price() * 10 == 14_480_000
+        assert sjc.price("buy") * 10 == 14_100_000
+        # 14 480 000 a lượng is the 144,8 triệu the news quoted; the app stores
+        # it per chỉ, and the difference between the two sides is the spread.
+        assert sjc.sell * 10 == 14_480_000
+
+    def test_a_holding_created_without_a_basis_uses_the_default(self, db):
+        """Through the ORM without naming `pricing`, which is how a record is
+        written by anything that is not this app's own schema.
+
+        The column carries the default too, because a Python-side default is an
+        ORM feature: a raw write falls back to the column's own. Those two
+        disagreed once — the schema said `buy`, the model said `sell` — and a
+        holding came out on the wrong side of the spread.
+        """
+        from app.money import DEFAULT_GOLD_PRICING
+
+        db.add(
+            models.Gold(
+                name="SJC", currency="VND", quantity=5,
+                unit="chi", product_key=SJC_KEY,
+            )
+        )
+        db.commit()
+
+        row = db.query(models.Gold).one()
+        assert row.pricing == DEFAULT_GOLD_PRICING == "sell"
+
+        # And the column's own default agrees, for a write that skips the ORM.
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO gold (name, currency, quantity, unit, product_key, "
+                    " created_at, updated_at) "
+                    "VALUES ('SJC', 'VND', 1, 'chi', :key, 'now', 'now')"
+                ),
+                {"key": SJC_KEY},
+            )
+        with engine.connect() as connection:
+            found = connection.execute(
+                text("SELECT pricing FROM gold ORDER BY id DESC LIMIT 1")
+            ).scalar_one()
+        assert found == "sell"
+
+    def test_the_spread_is_visible_whichever_side_is_chosen(self):
+        # Both figures travel with the product, so the interface can always
+        # show what the shop pays beside what it charges.
+        sjc = gold.find("vang-mieng-sjc-vang-sjc")
+        assert sjc.sell - sjc.buy == 38_000  # per chỉ
 
 
 class TestFindingAProduct:
@@ -196,21 +266,40 @@ class TestGoldInThePortfolio:
                 "quantity": 5,
                 "unit": "chi",
                 "product_key": SJC_KEY,
-                "pricing": "buy",
+                "pricing": "sell",
                 "cost_basis": 6_500_000,
             },
         )
         assert created.status_code == 201, created.text
         body = created.json()
-        assert body["price"] == SJC_PER_CHI_BUY
-        assert body["value"] == pytest.approx(5 * SJC_PER_CHI_BUY)
-        assert body["value_base"] == pytest.approx(5 * SJC_PER_CHI_BUY)
+        assert body["pricing"] == "sell"
+        assert body["price"] == SJC_PER_CHI_SELL
+        assert body["value"] == pytest.approx(5 * SJC_PER_CHI_SELL)
+        assert body["value_base"] == pytest.approx(5 * SJC_PER_CHI_SELL)
         assert body["price_as_of"] == "2026-10-11"
 
         after = client.get("/api/portfolio").json()
-        assert after["gold_value"] == pytest.approx(5 * SJC_PER_CHI_BUY)
+        assert after["gold_value"] == pytest.approx(5 * SJC_PER_CHI_SELL)
         assert after["total"] == pytest.approx(before["total"] + after["gold_value"])
         assert after["counts"]["gold"] == 1
+
+    def test_the_default_price_basis_is_the_shops_asking_price(self, client):
+        """With no `pricing` in the request at all.
+
+        The field has a default in three places — the vocabulary, the model and
+        the request schema — and they disagreed once, which put a holding on the
+        wrong side of the spread. This test asks the API the question the way a
+        client that does not know about `pricing` would ask it.
+        """
+        created = client.post(
+            "/api/gold",
+            json={
+                "name": "SJC", "currency": "VND", "quantity": 1,
+                "unit": "chi", "product_key": SJC_KEY,
+            },
+        ).json()
+        assert created["pricing"] == "sell"
+        assert created["price"] == SJC_PER_CHI_SELL
 
     def test_gold_is_its_own_kind_in_the_allocation(self, client):
         client.post(
@@ -233,8 +322,8 @@ class TestGoldInThePortfolio:
                 "unit": "luong", "product_key": SJC_KEY,
             },
         ).json()
-        assert created["price"] == pytest.approx(SJC_PER_CHI_BUY * 10)
-        assert created["value"] == pytest.approx(SJC_PER_LUONG_BUY)
+        assert created["price"] == pytest.approx(SJC_PER_CHI_SELL * 10)
+        assert created["value"] == pytest.approx(SJC_PER_LUONG_SELL)
 
     def test_the_sell_price_can_be_chosen_and_is_higher(self, client):
         created = client.post(
@@ -257,8 +346,8 @@ class TestGoldInThePortfolio:
             },
         ).json()
         # 10 chỉ at 1 410 000 ₫ = 14 100 000 ₫, at 26 000 ₫/$ .
-        assert created["value"] == pytest.approx(14_100_000)
-        assert created["value_base"] == pytest.approx(14_100_000)
+        assert created["value"] == pytest.approx(14_480_000)
+        assert created["value_base"] == pytest.approx(14_480_000)
 
     def test_a_holding_whose_product_is_gone_is_reported_not_zeroed(self, client, db):
         created = client.post(
@@ -348,7 +437,7 @@ class TestTheGoldEndpoints:
         updated = client.patch(
             f"/api/gold/{created['id']}", json={"quantity": 10}
         ).json()
-        assert updated["value"] == pytest.approx(10 * SJC_PER_CHI_BUY)
+        assert updated["value"] == pytest.approx(10 * SJC_PER_CHI_SELL)
 
     def test_editing_to_a_product_that_does_not_exist_is_refused(self, client):
         created = client.post(
@@ -425,14 +514,17 @@ class TestGoldThroughARefresh:
     def test_gold_is_in_the_recorded_total(self, db):
         db.add(
             models.Gold(
+                # No pricing: the model's default, which is the shop's asking
+                # price. Asserting against an explicitly chosen basis here
+                # would hide a disagreement between the three defaults.
                 name="SJC", currency="VND", quantity=5,
-                unit="chi", product_key=SJC_KEY, pricing="buy",
+                unit="chi", product_key=SJC_KEY,
             )
         )
         db.commit()
 
         row = valuation.write_snapshot(db)
-        assert row.gold_value == pytest.approx(5 * SJC_PER_CHI_BUY)
+        assert row.gold_value == pytest.approx(5 * SJC_PER_CHI_SELL)
         assert row.total >= row.gold_value
 
 

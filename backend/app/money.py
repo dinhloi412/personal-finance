@@ -34,10 +34,18 @@ AssetKind = Literal["stock", "fund", "crypto", "cash", "deposit", "gold"]
 #: shop this app reads quotes per chỉ.
 GoldUnit = Literal["chi", "luong", "gram", "ounce"]
 
-#: Which of a goldshop's two prices a holding is valued at. The shop buys at
-#: one and sells at the other, and the difference is real money: valuing gold
-#: at the sell price shows a profit on gold bought a moment ago.
-GoldPricing = Literal["buy", "sell"]
+#: Which of a goldshop's two prices a holding is valued at.
+#:
+#: The default is **sell** — what the shop charges — because that is what "the
+#: gold price" means to anyone reading one: the news says SJC is 144,8 triệu a
+#: lượng, and that is the shop's asking price, not what it pays. It is also the
+#: same basis as every other holding in this app: a stock, a fund and a crypto
+#: are all valued at the price you would have to pay for them.
+#:
+#: **buy** is what the shop would pay you today. It is the honest figure for
+#: "what could I get for this", and the difference between the two is the
+#: spread — real money, which is why both are shown.
+GoldPricing = Literal["sell", "buy"]
 Language = Literal["vi", "en"]
 
 #: How a term deposit pays its interest. Only one behaviour is implemented,
@@ -57,10 +65,10 @@ DEFAULT_BASE_CURRENCY: Final[BaseCurrency] = "VND"
 DEFAULT_LANGUAGE: Final[Language] = "vi"
 DEFAULT_INTEREST_MODE: Final[InterestMode] = "at_maturity"
 DEFAULT_GOLD_UNIT: Final[GoldUnit] = "chi"
-DEFAULT_GOLD_PRICING: Final[GoldPricing] = "buy"
+DEFAULT_GOLD_PRICING: Final[GoldPricing] = "sell"
 #: Named separately because the model's default reads better as a constant than
-#: as the string "buy", which is a word that means several things.
-GOLD_PRICING_BUY: Final[GoldPricing] = "buy"
+#: as a bare string, which is a word that means several things.
+GOLD_PRICING_SELL: Final[GoldPricing] = "sell"
 
 #: A troy ounce, in grams. Not a unit this app prices in — the gold it tracks is
 #: Vietnamese and quoted per chỉ — but kept in the gram table so a weight given

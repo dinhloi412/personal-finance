@@ -262,10 +262,20 @@ Four facts about that payload, all found by looking at it:
   name** (`... 5 LƯỢNG ...`, `... 0,5 KG ...`, or nothing, which for a bar means
   one lượng). Everything is normalised to a price **per chỉ**, the unit
   Vietnamese gold is bought in. 1 lượng is 10 chỉ by definition.
-- **The shop buys at one price and sells at another.** The default is what the
-  shop **pays** you (`mua`): valuing gold at the sell price shows a profit on
-  gold bought a moment ago. A holding records which of the two it uses, and the
-  interface shows the other beside it as the spread.
+- **The shop buys at one price and sells at another, and the default is the
+  price the shop CHARGES** (`bán`), because that is what "the gold price" means:
+  the news on 2026-10-11 said SJC was 144,8 triệu a lượng, and that is the shop's
+  asking price, not what it pays. It is also the same basis as every other
+  holding here — a stock, a fund and a crypto are valued at what they would cost
+  to buy. `mua`, what the shop pays you, is the honest figure for "what could I
+  get for this" and is one setting away. Both figures travel with the product,
+  so the interface always shows the spread beside the one in use.
+
+  This default was wrong in the first version, and the symptom was exactly the
+  one to expect: an app showing a number 3,8 triệu a lượng below the figure in
+  every newspaper headline. The default now lives in one place —
+  `app.money.DEFAULT_GOLD_PRICING` — and the tests assert against the published
+  news figure rather than against the code's own choice.
 - **The payload is a list of one-key objects**, every field suffixed with its
   row number (`@n_1`, `@pb_1`, `@d_1`), so rows are read by their own number.
 - **Not every line states its weight.** `ĐỒNG XU VRTL 0.1` is a coin whose name
